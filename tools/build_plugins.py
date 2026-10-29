@@ -133,6 +133,58 @@ def pinned_toolchain() -> str:
     return channel
 
 
+def ensure_rustup_components(env: dict[str, str]) -> None:
+    """Install the target and components the build needs for the pinned toolchain.
+
+    ``rust-toolchain.toml`` auto-installs targets/components only when ``rustup``
+    selects the toolchain itself. ``build_plugins.py`` pins the toolchain via
+    ``RUSTUP_TOOLCHAIN`` instead, so missing pieces error out instead of
+    auto-installing. This preflight installs ``wasm32-wasip2``
+    (needed by every wasm build), ``rustfmt`` (``cargo fmt``), and ``clippy``
+    (``cargo clippy``) if any are absent.
+    """
+    env = dict(os.environ, **env)
+    toolchain = env.get("RUSTUP_TOOLCHAIN", pinned_toolchain())
+
+    def run(args: list[str]) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            ["rustup", *args],
+            env=env,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+    target_list = run(["target", "list", "--installed", "--toolchain", toolchain])
+    if target_list.returncode != 0:
+        raise BuildError(
+            f"cannot list installed targets for {toolchain}: "
+            f"{target_list.stderr.strip()}"
+        )
+    if WASM_TARGET not in target_list.stdout.splitlines():
+        add = run(["target", "add", WASM_TARGET, "--toolchain", toolchain])
+        if add.returncode != 0:
+            raise BuildError(
+                f"could not install {WASM_TARGET} for {toolchain}: {add.stderr.strip()}"
+            )
+
+    component_list = run(["component", "list", "--installed", "--toolchain", toolchain])
+    if component_list.returncode != 0:
+        raise BuildError(
+            f"cannot list installed components for {toolchain}: "
+            f"{component_list.stderr.strip()}"
+        )
+    installed = {line.split()[0] for line in component_list.stdout.splitlines()}
+    for component in ("rustfmt", "clippy"):
+        if component in installed:
+            continue
+        add = run(["component", "add", component, "--toolchain", toolchain])
+        if add.returncode != 0:
+            raise BuildError(
+                f"could not install {component} for {toolchain}: {add.stderr.strip()}"
+            )
+
+
 def cargo_env(plugin: pluginpack.Plugin) -> dict[str, str]:
     """Environment for every cargo run: pinned toolchain + path remapping."""
     env = dict(os.environ)
@@ -256,6 +308,8 @@ def build_plugin(args: argparse.Namespace, plugin: pluginpack.Plugin) -> None:
         raise BuildError(f"{plugin.name}: no Cargo.toml")
 
     ensure_lockfile(plugin)
+    if not args.skip_build:
+        ensure_rustup_components(cargo_env(plugin))
     check_formatting(args, plugin)
     if not args.skip_tests:
         run_cargo(plugin, ["test", "--locked"], stage="test")

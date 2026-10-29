@@ -75,7 +75,11 @@ Run Python only through `uv` (never bare `python`/`python3`); keep
 `--python 3.13` because package digests must come from stock zlib.
 
 * `uv run --python 3.13 python tools/build_plugins.py --package` — fmt,
-  test, clippy (host + wasm), wasm build, zip, registry refresh.
+  test, clippy (host + wasm), wasm build, zip, registry refresh. The tool
+  pins the toolchain via `RUSTUP_TOOLCHAIN` and auto-installs the
+  `wasm32-wasip2` target, `rustfmt`, and `clippy` for that toolchain if they
+  are missing (this matters on CI, where `rust-toolchain.toml` does not
+  auto-install them when the toolchain is pinned by environment).
 * `uv run --python 3.13 python tools/build_plugins.py --check` — exit 2 when
   the registry is stale.
 * `uv run --python 3.13 python tools/ci/check_registry_contract.py` — the
