@@ -1,0 +1,12 @@
+name = "hello-from-hana"
+version = "0.1.0"
+description = "Return a friendly greeting from Hana"
+author = "seungjin"
+wasm_path = "hello_from_hana.wasm"
+capabilities = ["tool"]
+# Only permissions the host actually supports: http_client, file_read,
+# file_write, config_read, memory_read, memory_write, socket_client,
+# websocket_client. config_read is absent by default: the host rejects it
+# without a [config_schema], so add both together (see plugins/redact-text).
+permissions = []
+

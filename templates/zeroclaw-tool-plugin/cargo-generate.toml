@@ -1,0 +1,31 @@
+# Scaffold: cargo generate --path <this-file> --name my-plugin
+# Placeholders are filled from the CLI (--define tool_name=..., ...) or
+# prompted for. `name` is cargo-generate's built-in project name; it becomes
+# the crate name and the required kebab-case plugin name.
+[template]
+name = "zeroclaw-tool-plugin"
+description = "Scaffold a ZeroClaw tool plugin (WIT component built for wasm32-wasip2)."
+
+[placeholders.author]
+type = "string"
+prompt = "Author"
+default = "you"
+
+[placeholders.tool_name]
+type = "string"
+prompt = "Tool name the model calls (snake_case, must not contain '__')"
+regex = "^[a-z][a-z0-9_]*$"
+
+[placeholders.tool_description]
+type = "string"
+prompt = "Tool description shown to the model"
+
+[placeholders.registry]
+type = "bool"
+prompt = "Publish to the install registry? (false = source-only, registry = false)"
+default = false
+
+[placeholders.config_read]
+type = "bool"
+prompt = "Read operator config? (adds config_read permission + [config_schema])"
+default = false

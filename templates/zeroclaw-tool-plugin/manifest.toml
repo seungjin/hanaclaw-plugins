@@ -1,0 +1,29 @@
+name = "{{project-name}}"
+version = "0.1.0"
+description = "{{tool_description}}"
+author = "{{author}}"
+wasm_path = "{{crate_name | snake_case}}.wasm"
+capabilities = ["tool"]
+# Only permissions the host actually supports: http_client, file_read,
+# file_write, config_read, memory_read, memory_write, socket_client,
+# websocket_client. config_read is absent by default: the host rejects it
+# without a [config_schema], so add both together (see plugins/redact-text).
+permissions = [{% if config_read %}"config_read"{% endif %}]
+{%- unless config_read %}
+{%- unless registry %}
+# Source-only plugin: build_plugins.py skips it entirely (no build, no zip, no
+# registry entry). Remove this guard once the plugin is ready to publish.
+registry = false
+{%- endunless %}
+{%- endunless %}
+
+{%- if config_read %}
+
+# config_read and config_schema are a biconditional: the host rejects a
+# manifest carrying one without the other. Every key must be optional so a
+# withheld grant (which injects `{}`) still validates.
+[config_schema]
+"$schema" = "https://json-schema.org/draft/2020-12/schema"
+type = "object"
+additionalProperties = false
+{%- endif %}

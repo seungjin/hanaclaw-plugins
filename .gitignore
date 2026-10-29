@@ -1,0 +1,16 @@
+# Cargo build output (per-crate target/, plugin wasm).
+target/
+*.wasm
+
+# Release zips produced by tools/build_plugins.py --package.
+dist/
+
+# Python bytecode (tools/).
+__pycache__/
+*.py[co]
+
+# Interrupted WIT fetch scratch files; the fetcher renames them into place.
+wit/*/.*.partial
+
+# ruff cache (uvx ruff check tools/).
+.ruff_cache/
