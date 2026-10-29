@@ -95,6 +95,9 @@ REMAP_FLAG = "--remap-path-prefix={source}=/cargo/registry"
 # Plugins bind `wit/v0` (see each crate's `wit_bindgen::generate!`), so a
 # drifted tree silently changes the bytes of every wasm built here.
 WIT_CONTRACT = REPO_ROOT / "wit" / "v0"
+# `cargo fmt` is run with RUSTFMT_CONFIG pointed here, so a contributor's
+# ~/.config/rustfmt/rustfmt.toml cannot redefine what "formatted" means.
+RUSTFMT_CONFIG = REPO_ROOT / "rustfmt.toml"
 
 
 class BuildError(Exception):
@@ -149,16 +152,45 @@ def cargo_env(plugin: pluginpack.Plugin) -> dict[str, str]:
     return env
 
 
-def cargo(plugin: pluginpack.Plugin, args: list[str]) -> subprocess.CompletedProcess:
+def rustfmt_env(plugin: pluginpack.Plugin) -> dict[str, str]:
+    """``cargo_env`` plus a rustfmt config pinned to this repository.
+
+    rustfmt merges ``~/.config/rustfmt/rustfmt.toml`` (or ``$RUSTFMT_CONFIG``)
+    into every run, so the machine running the check would otherwise decide
+    what "formatted" means. A tree formatted at max_width = 80 passes on the
+    author's laptop and fails CI, where the runner's HOME has no such file.
+    Pointing the config at this repository's ``rustfmt.toml`` makes the check
+    depend only on committed bytes.
+    """
+    env = cargo_env(plugin)
+    env["RUSTFMT_CONFIG"] = str(RUSTFMT_CONFIG.resolve())
+    return env
+
+
+def cargo(
+    plugin: pluginpack.Plugin,
+    args: list[str],
+    *,
+    env: dict[str, str] | None = None,
+) -> subprocess.CompletedProcess:
     return subprocess.run(
-        ["cargo", *args], cwd=plugin.dir, env=cargo_env(plugin), check=False
+        ["cargo", *args],
+        cwd=plugin.dir,
+        env=env if env is not None else cargo_env(plugin),
+        check=False,
     )
 
 
-def run_cargo(plugin: pluginpack.Plugin, args: list[str], *, stage: str) -> None:
+def run_cargo(
+    plugin: pluginpack.Plugin,
+    args: list[str],
+    *,
+    stage: str,
+    env: dict[str, str] | None = None,
+) -> None:
     command = ["cargo", *args]
     print(f"  [{plugin.name}] {stage}: {' '.join(command)}")
-    result = cargo(plugin, args)
+    result = cargo(plugin, args, env=env)
     if result.returncode != 0:
         raise BuildError(
             f"{plugin.name}: `cargo {args[0]}` failed (exit {result.returncode}); "
@@ -182,6 +214,20 @@ def ensure_lockfile(plugin: pluginpack.Plugin) -> None:
     print(f"  [{plugin.name}] wrote Cargo.lock (commit it)")
 
 
+def target_dir(plugin: pluginpack.Plugin) -> Path:
+    """Where cargo writes artifacts for this crate.
+
+    ``CARGO_TARGET_DIR`` wins over the crate-local ``target/``, and CI sets it
+    (the template job keeps generated crates' build output out of the
+    checkout). Honoring it here is what lets a build land where cargo actually
+    wrote it instead of silently looking in ``target/``.
+    """
+    configured = os.environ.get("CARGO_TARGET_DIR")
+    if configured:
+        return Path(configured).expanduser().resolve()
+    return plugin.dir / "target"
+
+
 def built_wasm(plugin: pluginpack.Plugin) -> Path:
     """Cargo's release artifact for this plugin's crate.
 
@@ -191,12 +237,17 @@ def built_wasm(plugin: pluginpack.Plugin) -> Path:
     cargo = tomllib.loads((plugin.dir / "Cargo.toml").read_text())
     # Cargo turns '-' in the package name into '_' in the artifact filename.
     crate = cargo["package"]["name"].replace("-", "_")
-    return plugin.dir / "target" / WASM_TARGET / "release" / f"{crate}.wasm"
+    return target_dir(plugin) / WASM_TARGET / "release" / f"{crate}.wasm"
 
 
 def check_formatting(args: argparse.Namespace, plugin: pluginpack.Plugin) -> None:
     if not args.skip_fmt_check:
-        run_cargo(plugin, ["fmt", "--all", "--", "--check"], stage="fmt")
+        run_cargo(
+            plugin,
+            ["fmt", "--all", "--", "--check"],
+            stage="fmt",
+            env=rustfmt_env(plugin),
+        )
 
 
 def build_plugin(args: argparse.Namespace, plugin: pluginpack.Plugin) -> None:

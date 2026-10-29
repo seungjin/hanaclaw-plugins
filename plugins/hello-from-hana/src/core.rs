@@ -41,15 +41,13 @@ mod tests {
 
     #[test]
     fn greets_a_named_person() {
-        let input: ToolInput =
-            serde_json::from_str(r#"{"name":"Seungjin"}"#).unwrap();
+        let input: ToolInput = serde_json::from_str(r#"{"name":"Seungjin"}"#).unwrap();
         assert_eq!(run(&input), "Hello from Hana! Nice to meet you, Seungjin.");
     }
 
     #[test]
     fn blank_name_falls_back_to_the_world() {
-        let input: ToolInput =
-            serde_json::from_str(r#"{"name":"   "}"#).unwrap();
+        let input: ToolInput = serde_json::from_str(r#"{"name":"   "}"#).unwrap();
         assert_eq!(run(&input), GREETING);
     }
 

@@ -38,8 +38,15 @@ repo's release URL and the zip's sha256. `publish_plugins.py` uploads the zip
 to the `plugins` release and verifies the download.
 
 The plugin only becomes installable after the upload: the registry entry
-alone points at a URL that does not exist yet. Use
-`tools/publish_plugins.py --dry-run` to see what would be uploaded.
+alone points at a URL that does not exist yet. That URL is a GitHub Release
+asset, identical in shape to upstream's:
+
+```
+https://github.com/seungjin/hanaclaw-plugins/releases/download/plugins/hello-from-hana-0.1.1.zip
+```
+
+`publish_plugins.py` creates the `plugins` release on first use, then only
+adds missing `name-version.zip` assets (never overwrites bytes).
 
 ## Install
 

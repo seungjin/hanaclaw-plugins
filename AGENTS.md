@@ -49,7 +49,8 @@ Dual license: MIT OR Apache-2.0 at the recipient's option.
   `cargo` there ignores the root pin). `tools/ci/check_toolchain.py` enforces
   that all copies and the workflow `RUST_TOOLCHAIN` env agree.
 * `tools/ci/` — `check_toolchain.py`, `check_wit_drift.sh`,
-  `check_template.sh`, `check_registry_growth.py`, `plan_matrix.py`,
+  `check_template.sh`, `check_registry_contract.py`,
+  `check_registry_growth.py`, `plan_matrix.py`,
   `run-packager-python.sh`, `packager-image.txt` (pinned digest).
 * `tools/pluginpack.py` — shared packaging/validation contract (zip format,
   manifest validation, registry rendering). Change it in one place only.
@@ -77,9 +78,16 @@ Run Python only through `uv` (never bare `python`/`python3`); keep
   test, clippy (host + wasm), wasm build, zip, registry refresh.
 * `uv run --python 3.13 python tools/build_plugins.py --check` — exit 2 when
   the registry is stale.
+* `uv run --python 3.13 python tools/ci/check_registry_contract.py` — the
+  registry document alone: entries well-formed, unique, every `url` the
+  exact `<name>-<version>.zip` asset on a known release base, and every
+  publishable plugin in `plugins/` recorded. This is what the `registry` job
+  runs, because a fresh clone has no `.wasm` to hash.
 * `uv run --python 3.13 python tools/update_zeroclaw_registry.py --check
   --offline` — upstream half only; drop `--offline` to compare against
-  upstream `main` (network).
+  upstream `main` (network). **Needs a built `.wasm`** next to each manifest
+  (`.wasm` is gitignored), so it fails in a fresh clone by design; run it
+  after `build_plugins.py`, not as the CI registry step.
 * `uv run --python 3.13 python tools/fetch_zeroclaw_wit.py --check`
   — offline WIT drift check.
 * `python3 tools/ci/check_toolchain.py` — every `rust-toolchain.toml` and
@@ -95,12 +103,36 @@ Run Python only through `uv` (never bare `python`/`python3`); keep
 * `uv run --python 3.13 python tools/publish_plugins.py --verify-only`
   — re-download and check every local registry URL (read-only, no `gh`
   release rights needed beyond read access).
+* Release contract: there is no plugin server and no `releases/release.json`;
+  each `url` is a GitHub Release asset
+  `…/releases/download/plugins/<name>-<version>.zip`. The release tag is fixed
+  (`plugins`), installs pin the asset's sha256, so a published asset is
+  immutable and a changed build needs a version bump. `publish_plugins.py`
+  creates the release on first upload.
 * Template changes: `cargo generate` reads the template from the git index,
   so `git add templates/` first; test all four combinations of
   `registry` x `config_read` and run the steps above on a generated plugin.
 * `uvx ruff check tools/` must be clean apart from the one known `SIM115`
   in `tools/fetch_zeroclaw_wit.py` (deliberate `delete=False` temp file);
   do not add new findings.
+
+### Formatting is hermetic: always check with a clean HOME
+`rustfmt` merges `~/.config/rustfmt/rustfmt.toml` (or `$RUSTFMT_CONFIG`) into
+every run, so a personal `max_width` decides what `cargo fmt --check`
+accepts. This repo shipped a tree that passed on the author's laptop
+(`max_width = 80`) and failed CI, where the runner's HOME has no such file
+and rustfmt joins those lines at the default 100. `rustfmt.toml` at the root
+(and in the template) pins the defaults, and `build_plugins.py` runs
+`cargo fmt` with `RUSTFMT_CONFIG` pointing at it. Before calling a formatting
+change done, reproduce a runner HOME:
+
+    env -i HOME=$(mktemp -d) PATH="$PATH" cargo fmt --manifest-path \
+      plugins/<name>/Cargo.toml --all -- --check
+
+A formatting-only change cannot alter wasm bytes, so it needs no version
+bump — but confirm with
+`tools/ci/run-packager-python.sh tools/build_plugins.py --skip-build
+--package dist --offline --check` before republishing.
 
 ## CI
 `.github/workflows/validate.yml` mirrors zeroclaw-plugins' stage order

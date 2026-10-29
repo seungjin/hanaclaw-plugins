@@ -4,8 +4,7 @@ use hello_from_hana::core::{GREETING, ToolInput, run};
 
 #[test]
 fn greets_a_named_person() {
-    let input: ToolInput =
-        serde_json::from_str(r#"{"name":"Seungjin"}"#).unwrap();
+    let input: ToolInput = serde_json::from_str(r#"{"name":"Seungjin"}"#).unwrap();
     assert!(run(&input).starts_with(GREETING));
     assert!(run(&input).contains("Seungjin"));
 }

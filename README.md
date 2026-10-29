@@ -55,6 +55,7 @@ tools/fetch_zeroclaw_wit.py        # vendor / update wit/<version>/
 tools/pluginpack.py                # shared zip, manifest, and digest contract
 tools/ci/                          # CI helpers (see CI section) + packager image pin
 rust-toolchain.toml                # pinned compiler (every plugin pins it too)
+rustfmt.toml                       # pinned formatting (rustfmt's defaults)
 LICENSE-MIT, LICENSE-APACHE        # MIT OR Apache-2.0 (wit/v0/ excluded)
 NOTICE                             # AI/LLM authorship + third-party terms
 ```
@@ -133,6 +134,25 @@ python3 tools/ci/check_toolchain.py   # every pin + the workflow env agree
 When the channel changes, bump it everywhere and rebuild; a new compiler is a
 new binary, so every published plugin needs a new version too.
 
+### Formatting is pinned too
+
+`rustfmt` merges `~/.config/rustfmt/rustfmt.toml` (or `$RUSTFMT_CONFIG`) into
+every run, so a personal `max_width` silently decides what `cargo fmt --check`
+accepts. That is a real failure mode: a tree formatted with `max_width = 80`
+passes locally and fails CI, where the runner's HOME has no config and rustfmt
+uses the default 100. `rustfmt.toml` at the root (and in the template) lists
+rustfmt's defaults so the result depends only on committed bytes, and
+`tools/build_plugins.py` runs `cargo fmt` with `RUSTFMT_CONFIG` pointed at it.
+To reproduce what CI sees:
+
+```bash
+env -i HOME="$(mktemp -d)" PATH="$PATH" cargo fmt \
+  --manifest-path plugins/hello-from-hana/Cargo.toml --all -- --check
+```
+
+Formatting-only edits do not change wasm bytes, so they need no version bump;
+re-run the pinned-image package check to confirm the digest is untouched.
+
 ### Bytes must not depend on where you cloned
 
 cargo embeds absolute dependency paths (`$CARGO_HOME/registry/...`) and the
@@ -169,6 +189,49 @@ uv run --python 3.13 python tools/publish_plugins.py --verify-only --ref main
 
 `--verify-only` needs no upload rights, so it is the cheap check to run before
 installing from the catalog or in CI against a pushed ref.
+
+### Where the zips actually live: GitHub Releases
+
+There is no plugin server. Every catalog entry is a plain asset on a rolling
+GitHub Release, and the `url` in `registry.json` is the literal file the host
+downloads and sha256-checks:
+
+```
+https://github.com/<owner>/<repo>/releases/download/<tag>/<name>-<version>.zip
+```
+
+Upstream uses exactly one release, tag `plugins` (title "Plugin artifacts"),
+holding every version of every plugin — 58 assets as of this writing, e.g.
+`bluesky-0.1.0.zip`, `discord-0.1.0.zip`, …, never overwritten. This repo
+follows the same scheme:
+
+| | upstream | this repo |
+|---|---|---|
+| release tag | `plugins` | `plugins` (`PLUGIN_RELEASE_TAG`) |
+| asset name | `<name>-<version>.zip` | same |
+| URL base | `…/zeroclaw-labs/zeroclaw-plugins/releases/download/plugins` | `…/seungjin/hanaclaw-plugins/releases/download/plugins` |
+| catalog | `raw.githubusercontent.com/…/main/registry.json` | same shape |
+
+So `hello-from-hana@0.1.1` resolves to
+`https://github.com/seungjin/hanaclaw-plugins/releases/download/plugins/hello-from-hana-0.1.1.zip`.
+The release asset is what makes the registry entry installable: the registry
+is published first (by you or by `publish.yml`), and the entry 404s until the
+matching zip is uploaded. `tools/publish_plugins.py` creates the `plugins`
+release on first run, then only adds missing assets.
+
+Notes:
+
+- `https://github.com/<owner>/<repo>/releases/release.json` does **not** exist
+  (GitHub returns 404 for both upstream and here). The machine-readable index
+  is the API, `https://api.github.com/repos/<owner>/<repo>/releases`, or the
+  committed `registry.json` — which is why the raw registry URL is the thing to
+  hand a host.
+- Release assets are not browsable as a tree; the human URL is
+  `https://github.com/<owner>/<repo>/releases/tag/plugins`.
+- A published `name@version` asset is immutable. Do not delete and re-upload a
+  changed zip — hosted installs pin the sha256. Bump the version instead.
+- Tags/versions are not interchangeable: the release tag (`plugins`) is fixed,
+  the per-plugin version lives only in the asset filename and manifest.
 
 ### Published versions are immutable
 
@@ -302,7 +365,7 @@ workflow.
 |---|---|
 | `fmt` | `git diff --check`, plus rustfmt on plugins whose `.rs` files this PR touched (untouched crates may carry pre-existing debt; their published bytes cannot be reformatted without a version bump) |
 | `changes` | `tools/ci/plan_matrix.py` shards plugins; `mode=changed` for a PR, `all` for a push |
-| `registry` | toolchain pins agree, `ruff`, WIT checksums, `update_zeroclaw_registry.py --check --offline` in the pinned image, and that `registry.json` only grows |
+| `registry` | toolchain pins agree, `ruff`, WIT checksums, `check_registry_contract.py` (every entry well-formed and unique, every URL the exact asset an install fetches, every publishable plugin recorded), and that `registry.json` only grows |
 | `wit-drift` | vendored `wit/v0/` still equals the pinned ZeroClaw source |
 | `template` | `cargo generate` from `templates/` builds every combination |
 | `components` | per shard: tests, clippy, `--skip-fmt-check` where allowed, then `build_plugins.py --plugin … --wasm-dir staged --skip-package`; uploads `staged/<name>/<wasm>.wasm` |

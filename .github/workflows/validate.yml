@@ -41,6 +41,11 @@ jobs:
           components: rustfmt
       - name: Check formatting and whitespace
         shell: bash
+        env:
+          # The runner's HOME has no rustfmt config, but pin it anyway so a
+          # self-hosted runner or a future image change cannot redefine the
+          # style this job enforces.
+          RUSTFMT_CONFIG: ${{ github.workspace }}/rustfmt.toml
         run: |
           set -euo pipefail
 
@@ -146,11 +151,14 @@ jobs:
         run: uvx ruff check tools/ --ignore SIM115
       - name: Check vendored WIT checksums (offline)
         run: uv run --python 3.13 python tools/fetch_zeroclaw_wit.py --check
-      - name: Check the generated registry is current
+      - name: Check the registry matches a known release base
         shell: bash
-        # Digests come from the pinned image, so a wrong interpreter cannot
-        # pass here and then fail at publish time.
-        run: tools/ci/run-packager-python.sh tools/update_zeroclaw_registry.py --check --offline
+        # No .wasm exists in a fresh clone (.wasm is gitignored), so the
+        # committed digests cannot be recomputed here; `package` does that
+        # once the shards upload their artifacts. This proves the document
+        # instead: every entry well-formed and unique, every URL the exact
+        # asset an install will fetch, and every publishable plugin recorded.
+        run: uv run --python 3.13 python tools/ci/check_registry_contract.py
       - name: Check the registry only grows
         if: github.event_name == 'pull_request' || github.event_name == 'push'
         shell: bash
