@@ -229,6 +229,8 @@ def cargo(
         ["cargo", *args],
         cwd=plugin.dir,
         env=env if env is not None else cargo_env(plugin),
+        text=True,
+        capture_output=True,
         check=False,
     )
 
@@ -244,6 +246,12 @@ def run_cargo(
     print(f"  [{plugin.name}] {stage}: {' '.join(command)}")
     result = cargo(plugin, args, env=env)
     if result.returncode != 0:
+        stderr = result.stderr.strip()
+        print(f"::error::{plugin.name}: {stage} failed (exit {result.returncode})")
+        if stderr:
+            # Surface the last few non-empty lines so CI annotations are useful.
+            tail = "\n".join(stderr.splitlines()[-12:])
+            print(f"::error::{tail}")
         raise BuildError(
             f"{plugin.name}: `cargo {args[0]}` failed (exit {result.returncode}); "
             f"rerun it in {plugin.dir} to see the output"
@@ -262,6 +270,10 @@ def ensure_lockfile(plugin: pluginpack.Plugin) -> None:
     print(f"  [{plugin.name}] {plugin.dir / 'Cargo.lock'} is missing: resolving")
     result = cargo(plugin, ["generate-lockfile"])
     if result.returncode != 0:
+        stderr = result.stderr.strip()
+        print(f"::error::{plugin.name}: cargo generate-lockfile failed")
+        if stderr:
+            print(f"::error::{stderr.splitlines()[-1]}")
         raise BuildError(f"{plugin.name}: `cargo generate-lockfile` failed")
     print(f"  [{plugin.name}] wrote Cargo.lock (commit it)")
 
