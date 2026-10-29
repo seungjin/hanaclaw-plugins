@@ -14,11 +14,27 @@
 Licensed under either of [Apache License, Version 2.0](./LICENSE-APACHE) or
 [MIT](./LICENSE-MIT), at your option.
 
-Personal ZeroClaw plugin catalog for
-[hanaclaw](https://github.com/seungjin/hanaclaw), a fork of ZeroClaw. It
-publishes its own `registry.json` so `hanaclaw plugin install <name>` (or
-`zeroclaw plugin install <name>`) resolves both the official plugins and the
-ones built here.
+Personal ZeroClaw plugin catalog, used with
+[hanaclaw](https://github.com/seungjin/hanaclaw) — my own build of ZeroClaw,
+not a separate CLI. There is therefore no `hanaclaw` command: you install with
+the binary you built (or stock `zeroclaw`) plus this catalog's `registry.json`,
+which carries the official plugins and the ones built here.
+
+```bash
+# stock ZeroClaw
+zeroclaw plugin install <name> --registry \
+  https://raw.githubusercontent.com/seungjin/hanaclaw-plugins/main/registry.json
+
+# your own build: the command is the binary you compiled
+./target/release/zeroclaw plugin install <name> --registry \
+  https://raw.githubusercontent.com/seungjin/hanaclaw-plugins/main/registry.json
+```
+
+Or point the host at this catalog once, for every install:
+
+```bash
+export ZEROCLAW_PLUGIN_REGISTRY_URL=https://raw.githubusercontent.com/seungjin/hanaclaw-plugins/main/registry.json
+```
 
 This repository is **originated from and modelled on**
 [zeroclaw-labs/zeroclaw-plugins](https://github.com/zeroclaw-labs/zeroclaw-plugins):
@@ -55,7 +71,7 @@ Quick answers:
 | pull upstream's newest catalog entries | `tools/update_zeroclaw_registry.py` |
 | move to a newer WIT contract | `tools/fetch_zeroclaw_wit.py`, then bump versions |
 | check whether anything is stale | `--check` on the build, registry, and WIT tools |
-| install a plugin from this catalog | `zeroclaw plugin install <name> --registry <raw URL>` |
+| install a plugin from this catalog | `zeroclaw plugin install <name> --registry <raw URL>` (binary = your build) |
 
 ## Build: from source to installable plugin
 
@@ -226,7 +242,8 @@ both, and let `tools/ci/check_registry_growth.py` verify the ledger already
 covered the entry that vanished. Editing a plugin in place is never the answer
 — retire the old identity, then publish a new version.
 
-Install with this registry:
+Install with this registry (the `zeroclaw` in the command is your build of
+the host — this repository ships no binary):
 
 ```bash
 zeroclaw plugin install <name> --registry https://raw.githubusercontent.com/seungjin/hanaclaw-plugins/main/registry.json

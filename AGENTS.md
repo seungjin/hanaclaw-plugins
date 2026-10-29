@@ -1,8 +1,14 @@
 # hanaclaw-plugins — agent notes
 
-Personal plugin catalog for hanaclaw (a ZeroClaw fork). Not an application:
-Rust plugin crates in `plugins/`, plus small Python tools. `README.md` is the
-human-facing guide; this file is the working contract for agents.
+Personal plugin catalog used with hanaclaw, my own build of ZeroClaw. hanaclaw
+is not a separate CLI: there is no `hanaclaw` command, and this repo ships no
+binary. Users install against this catalog with the `zeroclaw` binary they
+built (`--registry <raw URL>` or `ZEROCLAW_PLUGIN_REGISTRY_URL`). Never write
+`hanaclaw plugin install …` in docs.
+
+Not an application: Rust plugin crates in `plugins/`, plus small Python tools.
+`README.md` is the human-facing guide; this file is the working contract for
+agents.
 
 **Originated from zeroclaw-labs/zeroclaw-plugins.** The layout, registry
 schema, reproducible zip format, retirement-ledger semantics, and CI stage

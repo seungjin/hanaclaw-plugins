@@ -44,6 +44,7 @@ alone points at a URL that does not exist yet. Use
 ## Install
 
 ```bash
+# `zeroclaw` here is the host binary you built (or stock zeroclaw).
 zeroclaw plugin install hello-from-hana \
   --registry https://raw.githubusercontent.com/seungjin/hanaclaw-plugins/main/registry.json
 ```
