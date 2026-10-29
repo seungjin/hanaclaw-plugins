@@ -294,18 +294,33 @@ def warn_if_zlib_ng(stream=sys.stderr) -> None:
         )
 
 
+def package_wasm(pdir: Path, wasm_path: str) -> bytes:
+    """The built component's bytes, validated on their own.
+
+    Kept apart from ``package_files`` so CI can hash the wasm a shard produced
+    before dropping it next to ``manifest.toml`` (the only path the
+    packaging step can read).
+    """
+    return read_wasm(pdir / wasm_path)
+
+
+def read_wasm(wasm: Path) -> bytes:
+    """The bytes of a built component, refusing links and empty files."""
+    if wasm.is_symlink() or not wasm.is_file():
+        raise PackageError(f"{wasm}: missing or not a regular file")
+    contents = wasm.read_bytes()
+    if not contents:
+        raise PackageError(f"{wasm}: empty")
+    return contents
+
+
 def package_files(pdir: Path, wasm_path: str) -> dict[str, bytes]:
     """The two files the host installs: manifest.toml and the .wasm."""
     files = {"manifest.toml": (pdir / "manifest.toml").read_bytes()}
     for relative in files:
         if (pdir / relative).is_symlink():
             raise PackageError(f"{pdir / relative}: symbolic links are not allowed")
-    wasm = pdir / wasm_path
-    if wasm.is_symlink() or not wasm.is_file():
-        raise PackageError(f"{wasm}: missing or not a regular file")
-    files[wasm_path] = wasm.read_bytes()
-    if not files[wasm_path]:
-        raise PackageError(f"{wasm}: empty")
+    files[wasm_path] = package_wasm(pdir, wasm_path)
     extracted = sum(len(contents) for contents in files.values())
     if extracted > MAX_PLUGIN_EXTRACTED_BYTES:
         raise PackageError(
@@ -337,6 +352,10 @@ def write_zip(path: Path, name: str, files: dict[str, bytes]) -> None:
     deflate at level 6: identical content always yields identical bytes.
     """
     with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as archive:
+        # Not implied by the mode above: without it the level is the
+        # interpreter's default, and a future default would silently change
+        # every digest this repo has published.
+        archive.compresslevel = ZIP_COMPRESSION_LEVEL
         _write_zip(archive, name, files)
 
 

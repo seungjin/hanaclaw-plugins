@@ -2,6 +2,11 @@
 
 Minimal ZeroClaw **tool plugin** in this catalog: `hello_from_hana`.
 
+Written with AI/LLM assistance (OpenAI Codex, `deepseek-v4.1-flash`); see the
+repository's [NOTICE](../../NOTICE). Licensed MIT OR Apache-2.0; the crate
+declares `license = "MIT OR Apache-2.0"` and ships no license files of its own
+(they live at the repository root).
+
 It returns "Hello from Hana!" and, when the model passes `name`, adds a
 greeting for that name. It is the smallest end-to-end example of the
 build → package → publish → install flow.
@@ -28,7 +33,7 @@ uv run --python 3.13 python tools/publish_plugins.py
 ```
 
 `build_plugins.py` writes `hello_from_hana.wasm` here (gitignored), builds
-`dist/hello-from-hana-0.1.0.zip`, and regenerates `registry.json` with this
+`dist/hello-from-hana-0.1.1.zip`, and regenerates `registry.json` with this
 repo's release URL and the zip's sha256. `publish_plugins.py` uploads the zip
 to the `plugins` release and verifies the download.
 

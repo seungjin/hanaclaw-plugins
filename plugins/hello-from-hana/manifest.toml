@@ -1,5 +1,5 @@
 name = "hello-from-hana"
-version = "0.1.0"
+version = "0.1.1"
 description = "Return a friendly greeting from Hana"
 author = "seungjin"
 wasm_path = "hello_from_hana.wasm"

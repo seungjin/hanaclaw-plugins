@@ -1,9 +1,13 @@
 [package]
 name = "hello-from-hana"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 description = "ZeroClaw WIT tool plugin: Return a friendly greeting from Hana"
 publish = false
+# Dual-licensed MIT OR Apache-2.0, like the rest of this catalog. The
+# template ships no license files: copy LICENSE-MIT and LICENSE-APACHE
+# from the repo root if you publish this crate elsewhere.
+license = "MIT OR Apache-2.0"
 
 # cdylib = the wasm component the host loads; rlib = host-run tests for the
 # pure logic in src/core.rs.

@@ -1,0 +1,4 @@
+# Official Python image used for every digest-producing step, pinned by digest.
+# Upstream zeroclaw-plugins packages with exactly this interpreter (CPython
+# 3.12 built against stock zlib), so zips hash identically to theirs.
+docker.io/library/python@sha256:8859bd6ca943079262c27e38b7119cdacede77c463139a15651dd340087a6cc9

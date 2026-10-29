@@ -51,14 +51,14 @@
     },
     {
       "name": "hello-from-hana",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "description": "Return a friendly greeting from Hana",
       "author": "seungjin",
       "capabilities": [
         "tool"
       ],
-      "url": "https://github.com/seungjin/hanaclaw-plugins/releases/download/plugins/hello-from-hana-0.1.0.zip",
-      "sha256": "3bb8e5cc2f26009dc193b6cd2ca3d0a184b71eec618983d033838b76256c0008"
+      "url": "https://github.com/seungjin/hanaclaw-plugins/releases/download/plugins/hello-from-hana-0.1.1.zip",
+      "sha256": "162c1cd520f292bd48474c6bbda53d86f4cd00ef8eee3f16c4bd5433e1be45f1"
     },
     {
       "name": "matrix",

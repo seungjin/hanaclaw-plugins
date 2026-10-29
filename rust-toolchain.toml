@@ -1,0 +1,19 @@
+# Kept for repo-level tooling (`tools/*.py` run cargo, `cargo install`), but
+# NOT sufficient on its own: every plugins/<name>/ and the cargo-generate
+# template are standalone crates (`[workspace]` at the bottom of Cargo.toml),
+# so cargo inside them ignores this file and would use the machine default.
+#
+# The real pin lives with each crate (plugins/<name>/rust-toolchain.toml,
+# templates/zeroclaw-tool-plugin/rust-toolchain.toml), and
+# tools/build_plugins.py additionally exports RUSTUP_TOOLCHAIN from this
+# channel. Keep all three values identical: `tools/ci/check_toolchain.py`
+# (and the `registry` workflow job) fails when they drift.
+#
+# Changing this pin changes the bytes of every plugin. Published
+# name@version identities are immutable: bump each plugin's version in the
+# same change.
+[toolchain]
+channel = "1.98.1"
+profile = "minimal"
+components = ["clippy", "rustfmt"]
+targets = ["wasm32-wasip2"]

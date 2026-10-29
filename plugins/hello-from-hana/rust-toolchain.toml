@@ -1,0 +1,9 @@
+# Standalone crate: this file is what plain `cargo` in this directory obeys.
+# Must equal the `channel` in the repository-root rust-toolchain.toml;
+# tools/ci/check_toolchain.py enforces that. Bumping it changes published
+# wasm bytes, so bump this plugin's version at the same time.
+[toolchain]
+channel = "1.98.1"
+profile = "minimal"
+components = ["clippy", "rustfmt"]
+targets = ["wasm32-wasip2"]

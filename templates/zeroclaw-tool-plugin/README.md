@@ -5,6 +5,10 @@ pure core, thin wasm shim, host-run tests, and a manifest. It mirrors the
 layout of `zeroclaw-labs/zeroclaw-plugins/plugins/redact-text` (the canonical
 reference plugin), on edition 2024 with `wit-bindgen` 0.46.
 
+Generated crates carry `license = "MIT OR Apache-2.0"`, matching this repo;
+the template does not copy `LICENSE-MIT`/`LICENSE-APACHE` into the new crate,
+so copy them from the repository root if you publish the crate on its own.
+
 ## Usage
 
 From the repository root:

@@ -41,13 +41,32 @@ Formatting is never skippable: a rustfmt-clean tree is part of the contract
 for reproducible review, matching upstream CI. ``--skip-build`` reuses the
 ``.wasm`` already next to each ``manifest.toml`` and needs no wasm target.
 
+CI splits the work: a shard builds one plugin's wasm, then the packaging job
+re-zips it inside the pinned image, which is the only place a digest is
+decided. Two flags exist for that split:
+
+* ``--skip-package`` builds (or, with ``--skip-build``, checks) the wasm but
+  writes no zip, does not check or rewrite ``--output``, and never fails on an
+  already-published identity. It exits 0 when every built plugin packaged
+  cleanly -- the point is that a *later* job must reproduce the committed
+  digest from these exact bytes.
+* ``--baseline PATH`` (only meaningful with ``--offline``) inherits entries
+  from ``PATH`` instead of from ``--output``, so a partial build can render a
+  registry beside the checkout and compare it to the committed one. Local
+  entries not rebuilt this run keep their published ``url``/``sha256``.
+
+A partial build is not a replacement for the full sweep: only a push that
+builds every plugin proves the whole ``registry.json`` is reproducible.
+
 Exit codes: 0 = ok, 2 = drift with ``--check``, 1 = error. Requires Python
 3.11+ (tomllib) and ``cargo``.
 """
 from __future__ import annotations
 
 import argparse
+import hashlib
 import os
+import re
 import subprocess
 import sys
 import tomllib
@@ -62,6 +81,17 @@ from pluginpack import PackageError, entry_key, render
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 WASM_TARGET = "wasm32-wasip2"
+# The toolchain the pinned release bytes were built with. Each plugin is a
+# standalone crate (`[workspace]`), so the repository-root rust-toolchain.toml
+# does NOT apply to `cargo` inside plugins/<name>/: without this every build
+# would silently use whatever the machine/runner defaults to, and changing a
+# published digest as a side effect.
+TOOLCHAIN_FILE = REPO_ROOT / "rust-toolchain.toml"
+# Compiler flags that make a wasm byte-identical across checkouts. The
+# component embeds absolute paths of every dependency source it names, so the
+# same lockfile under /home/<user>/.cargo and /home/runner/.cargo otherwise
+# produces different (and differently sized) bytes for the same sources.
+REMAP_FLAG = "--remap-path-prefix={source}=/cargo/registry"
 # Plugins bind `wit/v0` (see each crate's `wit_bindgen::generate!`), so a
 # drifted tree silently changes the bytes of every wasm built here.
 WIT_CONTRACT = REPO_ROOT / "wit" / "v0"
@@ -74,10 +104,61 @@ class BuildError(Exception):
 # ── cargo ──────────────────────────────────────────────────────────────────
 
 
+def cargo_home() -> Path:
+    """The registry a plain cargo build here uses (``$CARGO_HOME`` or ~/.cargo).
+
+    Remapping its path is what makes the bytes identical on another machine.
+    """
+    return Path(os.environ.get("CARGO_HOME") or Path.home() / ".cargo")
+
+
+def pinned_toolchain() -> str:
+    """The ``channel`` from rust-toolchain.toml (the only source of truth)."""
+    try:
+        channel = tomllib.loads(TOOLCHAIN_FILE.read_text())["toolchain"]["channel"]
+    except (OSError, tomllib.TOMLDecodeError, KeyError) as e:
+        raise BuildError(
+            f"cannot read [toolchain] channel from {TOOLCHAIN_FILE}: {e}"
+        ) from e
+    if not isinstance(channel, str) or not re.fullmatch(
+        r"\d+\.\d+\.\d+", channel
+    ):
+        raise BuildError(
+            f"{TOOLCHAIN_FILE}: channel must be a pinned x.y.z release, "
+            f"not {channel!r}; a moving channel changes published bytes"
+        )
+    return channel
+
+
+def cargo_env(plugin: pluginpack.Plugin) -> dict[str, str]:
+    """Environment for every cargo run: pinned toolchain + path remapping."""
+    env = dict(os.environ)
+    env["RUSTUP_TOOLCHAIN"] = pinned_toolchain()
+    registry = cargo_home() / "registry"
+    # Both spellings: a symlinked home (/home vs /var/home) makes cargo print
+    # whichever path it resolved, and a missing remap silently changes bytes.
+    sources = dict.fromkeys(
+        [registry, registry.resolve(), Path.home() / ".cargo" / "registry"]
+    )
+    flags = env.get("RUSTFLAGS", "").split()
+    flags += [REMAP_FLAG.format(source=source) for source in sources]
+    # The crate root is embedded as well; remap it so a checkout under a
+    # different path (a second clone, CI) yields the same component.
+    flags.append(f"--remap-path-prefix={plugin.dir.resolve()}=/plugin")
+    env["RUSTFLAGS"] = " ".join(flags)
+    return env
+
+
+def cargo(plugin: pluginpack.Plugin, args: list[str]) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        ["cargo", *args], cwd=plugin.dir, env=cargo_env(plugin), check=False
+    )
+
+
 def run_cargo(plugin: pluginpack.Plugin, args: list[str], *, stage: str) -> None:
     command = ["cargo", *args]
     print(f"  [{plugin.name}] {stage}: {' '.join(command)}")
-    result = subprocess.run(command, cwd=plugin.dir, check=False)
+    result = cargo(plugin, args)
     if result.returncode != 0:
         raise BuildError(
             f"{plugin.name}: `cargo {args[0]}` failed (exit {result.returncode}); "
@@ -95,9 +176,7 @@ def ensure_lockfile(plugin: pluginpack.Plugin) -> None:
     if (plugin.dir / "Cargo.lock").is_file():
         return
     print(f"  [{plugin.name}] {plugin.dir / 'Cargo.lock'} is missing: resolving")
-    result = subprocess.run(
-        ["cargo", "generate-lockfile"], cwd=plugin.dir, check=False
-    )
+    result = cargo(plugin, ["generate-lockfile"])
     if result.returncode != 0:
         raise BuildError(f"{plugin.name}: `cargo generate-lockfile` failed")
     print(f"  [{plugin.name}] wrote Cargo.lock (commit it)")
@@ -157,11 +236,13 @@ def build_plugin(args: argparse.Namespace, plugin: pluginpack.Plugin) -> None:
     artifact = built_wasm(plugin)
     if not artifact.is_file() or artifact.stat().st_size == 0:
         raise BuildError(f"{plugin.name}: build produced no non-empty {artifact}")
-    destination = plugin.dir / plugin.wasm_path
-    # Copy bytes (never link): the zip packages exactly what the host loads.
-    destination.write_bytes(artifact.read_bytes())
-    print(f"  [{plugin.name}] -> {destination.relative_to(REPO_ROOT)} "
-          f"({destination.stat().st_size} bytes)")
+    destination = place_wasm(args, plugin, artifact)
+    shown = (
+        destination.relative_to(Path.cwd())
+        if destination.is_relative_to(Path.cwd())
+        else destination
+    )
+    print(f"  [{plugin.name}] -> {shown} ({destination.stat().st_size} bytes)")
 
 
 def check_wit_contract() -> list[str]:
@@ -294,6 +375,12 @@ def rebuild_registry(
     bytes on disk; local_hashes lets this tool skip re-zipping (same bytes),
     while ``--check`` can still show a drift for a changed package without
     refusing to render the drift.
+
+    A partial build (``--plugin`` in CI's pull-request path) only has the wasm
+    of the plugins it built. Published local entries it did not rebuild keep
+    the recorded ``url``/``sha256`` from the baseline document: their bytes
+    cannot change without a version bump (``stale_identities`` enforces it),
+    and inheriting them is what makes the result comparable to a full render.
     """
     registry_args = registry_tool.parse_args(
         [
@@ -311,16 +398,43 @@ def rebuild_registry(
             "--release-base",
             args.release_base,
             *(("--offline",) if args.offline else ()),
+            *(
+                ("--baseline", str(args.baseline))
+                if args.offline and args.baseline
+                else ()
+            ),
             *(("--retirements", str(args.retirements)) if args.retirements else ()),
         ]
     )
-    merged, _local = registry_tool.build(registry_args)
+    merged, _local, release_base = registry_tool.build(registry_args)
+    recorded = recorded_local_entries(args)
+    release_prefix = release_base.rstrip("/") + "/"
     for entry in merged["plugins"]:
         identity = (entry["name"], entry["version"])
-        if entry["url"].startswith(args.release_base.rstrip("/") + "/"):
-            entry["sha256"] = local_hashes.get(identity, entry["sha256"])
+        if not entry["url"].startswith(release_prefix):
+            continue
+        if identity in local_hashes:
+            entry["sha256"] = local_hashes[identity]
+        elif identity in recorded:
+            entry.update(recorded[identity])
     merged["plugins"].sort(key=entry_key)
     return merged
+
+
+def recorded_local_entries(
+    args: argparse.Namespace,
+) -> dict[tuple[str, str], dict]:
+    """Published local entries (url, sha256) from the document being edited.
+
+    ``--baseline`` names it when a partial build writes somewhere else; a full
+    build reads its own ``--output``. Entries from the wrong release base are
+    filtered by the caller.
+    """
+    source = args.baseline if args.offline and args.baseline else args.output
+    if not source.is_file():
+        return {}
+    _, published = pluginpack.load_registry(source)
+    return {identity: entry for identity, entry in published.items()}
 
 
 # ── CLI ────────────────────────────────────────────────────────────────────
@@ -344,8 +458,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         metavar="DIR",
         help="write uploadable zips here (default: dist/)",
     )
+    parser.add_argument(
+        "--wasm-dir",
+        type=Path,
+        metavar="DIR",
+        help="place built components at DIR/<name>/<wasm_path> and read them "
+        "there afterwards (default: the plugins directory)",
+    )
     parser.add_argument("--plugin", action="append", metavar="NAME",
-                        help="build only these plugins (repeatable)")
+                        help="build only these plugins (repeatable); also "
+                        "checks registry = false ones without indexing them")
     parser.add_argument("--check", action="store_true",
                         help="exit 2 if any wasm, zip, or registry entry is stale")
     parser.add_argument("--skip-tests", action="store_true", help="skip cargo test")
@@ -360,6 +482,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--skip-metadata", action="store_true",
                         help="do not check whether an indexed version changed")
+    parser.add_argument(
+        "--skip-package", action="store_true",
+        help="build the wasm only: write no zips, decide no identity, and "
+        "leave --output untouched (CI's per-plugin shard step)",
+    )
     parser.add_argument(
         "--prune", action="store_true",
         help="deliberately drop registry entries whose plugins/<name>/ is gone",
@@ -379,7 +506,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--offline",
         action="store_true",
-        help="reuse --output's upstream entries (no network)",
+        help="reuse --baseline's (default: --output's) upstream entries, no network",
+    )
+    parser.add_argument(
+        "--baseline",
+        type=Path,
+        help="registry to inherit entries from with --offline (default: --output)",
     )
     parser.add_argument(
         "--release-base",
@@ -409,6 +541,37 @@ def select_plugins(args: argparse.Namespace) -> list[pluginpack.Plugin]:
     return plugins
 
 
+def wasm_dir(args: argparse.Namespace) -> Path:
+    """Where ``<name>/<wasm_path>`` lives for this run."""
+    return args.wasm_dir if args.wasm_dir is not None else args.plugins
+
+
+def staged_wasm(args: argparse.Namespace, plugin: pluginpack.Plugin) -> Path:
+    """The copy of the component that packaging reads this run."""
+    return wasm_dir(args) / plugin.name / plugin.wasm_path
+
+
+def place_wasm(
+    args: argparse.Namespace, plugin: pluginpack.Plugin, artifact: Path
+) -> Path:
+    """Copy the cargo artifact both beside the manifest and to --wasm-dir.
+
+    Both copies matter: the manifest directory is what plain `cargo build`
+    plus a rerun of this tool sees, and --wasm-dir is what CI's shards
+    upload and the packaging job re-reads.
+    """
+    contents = pluginpack.read_wasm(artifact)
+    destinations = [
+        args.plugins / plugin.name / plugin.wasm_path,
+        staged_wasm(args, plugin),
+    ]
+    for destination in dict.fromkeys(destinations):
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        # Copy bytes (never link): the zip packages exactly what the host loads.
+        destination.write_bytes(contents)
+    return staged_wasm(args, plugin)
+
+
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     pluginpack.warn_if_zlib_ng()
@@ -436,14 +599,36 @@ def main(argv: list[str] | None = None) -> int:
         print(f"build: {len(plugins)} plugin(s) under {args.plugins}")
         for plugin in plugins:
             if not plugin.publishable:
-                print(f"  [{plugin.name}] registry = false: skipping build")
+                # `--plugin NAME` names work in progress explicitly; build and
+                # check it, but never package or index it (registry = false).
+                if not args.plugin:
+                    print(f"  [{plugin.name}] registry = false: skipping build")
+                    continue
+                print(f"  [{plugin.name}] registry = false: building unindexed")
+                if args.skip_build:
+                    wasm = staged_wasm(args, plugin)
+                    if not wasm.is_file():
+                        raise BuildError(
+                            f"{plugin.name}: --skip-build but {wasm} is missing"
+                        )
+                else:
+                    build_plugin(args, plugin)
                 continue
+
+            wasm = staged_wasm(args, plugin)
             if args.skip_build:
-                wasm = plugin.dir / plugin.wasm_path
                 if not wasm.is_file():
                     raise BuildError(f"{plugin.name}: --skip-build but {wasm} is missing")
             else:
                 build_plugin(args, plugin)
+            if args.skip_package:
+                # CI's shard step: prove the bytes build, write no zip, and
+                # decide no identity. The pinned packaging job re-runs this
+                # from the staged .wasm, so --output is not consulted here.
+                hashes[plugin.identity] = hashlib.sha256(
+                    pluginpack.read_wasm(wasm)
+                ).hexdigest()
+                continue
             if args.package is not None:
                 args.package.mkdir(parents=True, exist_ok=True)
                 hashes[plugin.identity] = package_plugin(
@@ -456,6 +641,10 @@ def main(argv: list[str] | None = None) -> int:
                 hashes[plugin.identity] = pluginpack.package_sha256(
                     plugin.dir, plugin.name, plugin.wasm_path
                 )
+
+        if args.skip_package:
+            print(f"built {len(publishable)} packageable plugin(s); no packaging")
+            return 0
 
         if not args.skip_metadata:
             stale = stale_identities(args, publishable, hashes)
@@ -476,10 +665,31 @@ def main(argv: list[str] | None = None) -> int:
         print(f"error: {e}", file=sys.stderr)
         return 1
 
+    if args.skip_package:
+        # CI's components stage: the shards publish their .wasm artifacts and
+        # a later job re-packages them (and the registry) in the pinned image.
+        print(f"built {len(publishable)} packageable plugin(s); no packaging")
+        return 0
+
     current = args.output.read_text() if args.output.is_file() else ""
     if args.check:
         if text == current:
             print(f"{args.output} is up to date ({len(merged['plugins'])} entries)")
+            return 0
+        # CI's partial build renders beside the checkout instead of
+        # overwriting it, so --check must also accept the baseline's bytes:
+        # the result has to equal the committed registry, not merely be
+        # "no worse than" a stale copy of the output path.
+        if (
+            args.baseline
+            and args.baseline.is_file()
+            and args.output != args.baseline
+            and text == args.baseline.read_text()
+        ):
+            print(
+                f"{args.baseline} is up to date "
+                f"({len(merged['plugins'])} entries)"
+            )
             return 0
         print(
             f"error: {args.output} is stale; run `uv run --python 3.13 python "

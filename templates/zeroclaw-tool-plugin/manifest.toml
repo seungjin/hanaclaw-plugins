@@ -9,12 +9,10 @@ capabilities = ["tool"]
 # websocket_client. config_read is absent by default: the host rejects it
 # without a [config_schema], so add both together (see plugins/redact-text).
 permissions = [{% if config_read %}"config_read"{% endif %}]
-{%- unless config_read %}
 {%- unless registry %}
 # Source-only plugin: build_plugins.py skips it entirely (no build, no zip, no
 # registry entry). Remove this guard once the plugin is ready to publish.
 registry = false
-{%- endunless %}
 {%- endunless %}
 
 {%- if config_read %}

@@ -59,6 +59,7 @@ RegistryError = PackageError
 class _Args(argparse.Namespace):
     upstream: str
     upstream_file: Path | None
+    baseline: Path | None
     plugins: Path
     output: Path
     release_base: str
@@ -108,6 +109,31 @@ def local_entries(plugins_root: Path, release_base: str) -> list[dict]:
 
 
 # ── merge ───────────────────────────────────────────────────────────────────
+
+
+def drop_stale_local(
+    upstream: dict, local: list[dict], release_base: str
+) -> dict:
+    """Forget this repo's own entries that no plugin builds any more.
+
+    Under ``--offline`` the baseline doubles as the upstream document, so
+    entries this repo published (its own ``release_base``) are inherited
+    verbatim. That is what keeps a partial rebuild reproducible, but it also
+    resurrects an identity whose plugin was renamed or whose version moved on
+    without a retirement: no manifest produces it, yet it would linger and
+    still advertise a zip nobody has. Upstream's entries are untouched — they
+    are not ours to prune.
+    """
+    prefix = release_base.rstrip("/") + "/"
+    built = {(entry["name"], entry["version"]) for entry in local}
+    return {
+        "plugins": [
+            entry
+            for entry in upstream["plugins"]
+            if not entry["url"].startswith(prefix)
+            or (entry["name"], entry["version"]) in built
+        ]
+    }
 
 
 def merge(
@@ -219,6 +245,13 @@ def parse_args(argv: list[str] | None = None) -> _Args:
         "--upstream-file", type=Path, help="read upstream from a local file instead"
     )
     parser.add_argument(
+        "--baseline",
+        type=Path,
+        help="registry whose entries to inherit when --offline is set "
+        "(default: --output); lets a partial rebuild compare against the "
+        "committed registry while writing elsewhere",
+    )
+    parser.add_argument(
         "--upstream-ref",
         metavar="REF",
         help="read the upstream registry at this branch, tag, or commit "
@@ -243,21 +276,88 @@ def parse_args(argv: list[str] | None = None) -> _Args:
     )
     parser.add_argument("--stdout", action="store_true", help="print instead of writing")
     parser.add_argument(
-        "--offline", action="store_true", help="reuse --output's upstream entries"
+        "--offline",
+        action="store_true",
+        help="reuse the entries of --baseline (default: --output), no network",
     )
     return parser.parse_args(argv, namespace=_Args())
 
 
-def build(args: _Args) -> tuple[dict, list[dict]]:
-    """Resolve upstream + local entries from the CLI arguments."""
+def upstream_release_base(url: str) -> str:
+    """The release directory an upstream ``registry.json`` URL lives beside.
+
+    ``https://github.com/<owner>/<repo>/...`` names its releases at
+    ``https://github.com/<owner>/<repo>/releases/download/<tag>``; an
+    upstream entry is one whose zip sits under that prefix. Used to tell
+    inherited entries from this repo's own in a baseline document.
+    """
+    match = re.match(
+        r"^https://(?:raw\.githubusercontent\.com|github\.com)/"
+        r"(?P<owner>[^/]+)/(?P<repo>[^/]+)/",
+        url,
+    )
+    if not match:
+        return ""
+    return f"https://github.com/{match['owner']}/{match['repo']}/releases/download/"
+
+
+def recorded_release_base(
+    registry: dict, upstream: str, release_base: str
+) -> str:
+    """The base a baseline registry uses for this repo's own zips.
+
+    A partial ``--offline`` rebuild must reproduce the committed entries of
+    plugins it did not build, so it needs the base those were published
+    under. Adopting the baseline's own base also keeps ``--release-base``
+    overrides stable across runs instead of needing to be passed every time.
+    Only entries outside the upstream release directory can be ours; with no
+    local entries the caller's base is kept.
+    """
+    upstream_base = upstream_release_base(upstream)
+    if not upstream_base:
+        return release_base
+    suffix = re.compile(r"/[^/]+-[^/]+\.zip$")
+    ours = {
+        entry["url"][: match.start()]
+        for entry in registry["plugins"]
+        if (match := suffix.search(entry["url"]))
+        and not entry["url"].startswith(upstream_base)
+    }
+    if len(ours) > 1:
+        raise RegistryError(
+            "the baseline mixes this repo's release bases: "
+            + ", ".join(sorted(ours))
+        )
+    return ours.pop() if ours else release_base
+
+
+def build(args: _Args) -> tuple[dict, list[dict], str]:
+    """Resolve upstream + local entries from the CLI arguments.
+
+    Returns the merged registry, the local entries it contains, and the
+    release base those local entries use (the baseline's own under
+    ``--offline``, otherwise ``--release-base``). Callers that post-process
+    local entries need the third value to recognize them.
+    """
+    release_base = args.release_base
     if args.upstream_file:
         upstream = json.loads(args.upstream_file.read_text())
         validate_registry(upstream, source=str(args.upstream_file))
     elif args.offline:
-        if not args.output.is_file():
-            raise RegistryError("--offline needs an existing --output registry to reuse")
-        upstream = json.loads(args.output.read_text())
-        validate_registry(upstream, source=str(args.output))
+        source_path = args.baseline or args.output
+        if not source_path.is_file():
+            raise RegistryError(
+                f"--offline needs an existing registry to reuse; {source_path} "
+                f"does not exist"
+            )
+        upstream = json.loads(source_path.read_text())
+        validate_registry(upstream, source=str(source_path))
+        # The baseline may address this repo's releases with another base
+        # (an older run, a fork, a test fixture): keep its own URLs, or a
+        # local plugin would be re-URLed and --check would report drift.
+        release_base = recorded_release_base(
+            upstream, args.upstream, args.release_base
+        )
     else:
         source = (
             pinned_registry_url(args.upstream, args.upstream_ref)
@@ -266,15 +366,19 @@ def build(args: _Args) -> tuple[dict, list[dict]]:
         )
         upstream = fetch_upstream(source)
     pluginpack.warn_if_zlib_ng()
-    local = local_entries(args.plugins, args.release_base)
+    local = local_entries(args.plugins, release_base)
+    if args.offline:
+        # The baseline stands in for upstream's document; its copy of our
+        # own entries is only valid while a manifest still builds them.
+        upstream = drop_stale_local(upstream, local, release_base)
     retirements = load_retirements(args.retirements) if args.retirements else {}
-    return merge(upstream, local, retirements), local
+    return merge(upstream, local, retirements), local, release_base
 
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     try:
-        merged, local = build(args)
+        merged, local, _release_base = build(args)
         text = render(merged)
     except RegistryError as e:
         print(f"error: {e}", file=sys.stderr)
@@ -288,6 +392,20 @@ def main(argv: list[str] | None = None) -> int:
         current = args.output.read_text() if args.output.is_file() else ""
         if current == text:
             print(f"{args.output} is up to date ({len(merged['plugins'])} entries)")
+            return 0
+        if (
+            current == ""
+            and args.offline
+            and args.baseline is not None
+            and args.baseline.is_file()
+            and args.baseline != args.output
+            and args.baseline.read_text() == text
+        ):
+            # A partial rebuild renders beside the committed registry: the
+            # baseline is the document that must stay reproducible.
+            print(
+                f"{args.baseline} is up to date ({len(merged['plugins'])} entries)"
+            )
             return 0
         print(
             f"error: {args.output} is stale; run `uv run --python 3.13 python "

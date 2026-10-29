@@ -1,0 +1,449 @@
+# Validation gate for the hanaclaw plugin catalog.
+#
+# Mirrors zeroclaw-plugins' validate.yml stages (fmt -> plan -> registry /
+# wit-drift / template -> components -> package -> gate) but drives this
+# repo's own tools: there is no tools/ci/build-registry.py here, packaging is
+# tools/build_plugins.py, and every digest-producing step runs inside the
+# pinned packager image so published sha256 values match upstream's.
+name: Validate plugin repository
+
+on:
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # Keep in step with rust-toolchain.toml; that pin is what plain `cargo`
+  # obeys locally, this env is what the rust-toolchain action installs.
+  RUST_TOOLCHAIN: "1.98.1"
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+
+jobs:
+  fmt:
+    name: Format
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          components: rustfmt
+      - name: Check formatting and whitespace
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          event_before="${{ github.event.before }}"
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            base="$(git merge-base origin/main HEAD)"
+          elif [[ "${{ github.event_name }}" == "push" \
+            && -n "$event_before" \
+            && "$event_before" != "0000000000000000000000000000000000000000" ]]; then
+            base="$event_before"
+          else
+            # A manual full sweep has no delta to assign new debt to.
+            base="HEAD"
+          fi
+          git diff --check "$base" HEAD
+
+          fmt_status=0
+          for manifest in plugins/*/Cargo.toml; do
+            [[ -f "$manifest" ]] || continue
+            if cargo fmt --manifest-path "$manifest" --all -- --check; then
+              continue
+            fi
+
+            plugin_dir="${manifest%/Cargo.toml}"
+            changed_rust=false
+            while IFS= read -r path; do
+              case "$path" in
+                *.rs) changed_rust=true; break ;;
+              esac
+            done < <(git diff --name-only --diff-filter=ACMRTUXB \
+              "$base" HEAD -- "$plugin_dir")
+
+            if [[ "$changed_rust" == true ]]; then
+              echo "::error file=${manifest}::Rust files changed in this plugin, but cargo fmt --check failed"
+              fmt_status=1
+            else
+              # Untouched crates may carry pre-existing debt; their published
+              # bytes cannot be reformatted without a version bump anyway.
+              echo "::warning file=${manifest}::Untouched plugin has pre-existing rustfmt debt"
+            fi
+          done
+          exit "$fmt_status"
+
+  changes:
+    name: Plan component matrix
+    needs: [fmt]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+      mode: ${{ steps.plan.outputs.mode }}
+      count: ${{ steps.plan.outputs.count }}
+      plugins: ${{ steps.plan.outputs.plugins }}
+      strict: ${{ steps.plan.outputs.strict }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+      - name: Plan validation shards
+        id: plan
+        env:
+          GITHUB_EVENT_BEFORE: ${{ github.event.before }}
+        run: python3 tools/ci/plan_matrix.py
+
+  registry:
+    name: Registry contract
+    needs: [fmt]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          python-version: "3.13"
+          enable-cache: false
+      - name: Guard plugin repository structure
+        shell: bash
+        run: |
+          set -euo pipefail
+          status=0
+          for dir in plugins/*/; do
+            [[ -d "$dir" ]] || continue
+            for required in manifest.toml Cargo.toml Cargo.lock; do
+              if [[ ! -f "${dir}${required}" ]]; then
+                echo "::error file=${dir}${required}::Missing required plugin file"
+                status=1
+              fi
+            done
+          done
+          if [[ ! -f wit/v0/.sha256 || ! -f wit/v0/UPSTREAM_REF ]]; then
+            echo "::error file=wit/v0::Vendored WIT is missing its pin or checksums"
+            status=1
+          fi
+          exit "$status"
+      - name: Check toolchain pins agree
+        run: python3 tools/ci/check_toolchain.py
+      - name: Lint the tooling
+        shell: bash
+        # SIM115: fetch_zeroclaw_wit.py keeps a delete=False temp file on
+        # purpose so the rename into place is atomic. Every other rule applies.
+        run: uvx ruff check tools/ --ignore SIM115
+      - name: Check vendored WIT checksums (offline)
+        run: uv run --python 3.13 python tools/fetch_zeroclaw_wit.py --check
+      - name: Check the generated registry is current
+        shell: bash
+        # Digests come from the pinned image, so a wrong interpreter cannot
+        # pass here and then fail at publish time.
+        run: tools/ci/run-packager-python.sh tools/update_zeroclaw_registry.py --check --offline
+      - name: Check the registry only grows
+        if: github.event_name == 'pull_request' || github.event_name == 'push'
+        shell: bash
+        run: |
+          set -euo pipefail
+          event_before="${{ github.event.before }}"
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            base_commit=$(git merge-base origin/main HEAD)
+          elif [[ -n "$event_before" \
+            && "$event_before" != "0000000000000000000000000000000000000000" ]]; then
+            base_commit=$event_before
+          else
+            # A freshly created branch has no prior ledger to compare against.
+            exit 0
+          fi
+          if ! git cat-file -e "${base_commit}:registry.json" 2>/dev/null; then
+            echo "base ${base_commit} has no registry.json; nothing to compare"
+            exit 0
+          fi
+          git show "${base_commit}:registry.json" > "$RUNNER_TEMP/base-registry.json"
+          # Retirements must land *before* the entries they remove disappear.
+          retirement_args=()
+          if git cat-file -e "${base_commit}:registry-retirements.json" 2>/dev/null; then
+            git show "${base_commit}:registry-retirements.json" \
+              > "$RUNNER_TEMP/base-retirements.json"
+            retirement_args+=(--retirements "$RUNNER_TEMP/base-retirements.json")
+          fi
+          python3 tools/ci/check_registry_growth.py \
+            --base "$RUNNER_TEMP/base-registry.json" \
+            "${retirement_args[@]}" registry.json
+
+  wit-drift:
+    name: WIT drift
+    needs: [fmt]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          python-version: "3.13"
+          enable-cache: false
+      - name: Compare vendored WIT with the pinned ZeroClaw source
+        run: tools/ci/check_wit_drift.sh
+
+  template:
+    name: Template smoke test
+    needs: [fmt]
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          targets: wasm32-wasip2
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          python-version: "3.13"
+          enable-cache: false
+      - uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: template-cargo-${{ runner.os }}-${{ env.RUST_TOOLCHAIN }}-${{ hashFiles('templates/**') }}
+          restore-keys: |
+            template-cargo-${{ runner.os }}-${{ env.RUST_TOOLCHAIN }}-
+      - name: Install cargo-generate
+        run: cargo install cargo-generate --locked --version "^0.25"
+      - name: Generate and build every template combination
+        env:
+          # Generated crates build inside the scratch dir, not the workspace.
+          CARGO_TARGET_DIR: ${{ runner.temp }}/template-target
+        run: tools/ci/check_template.sh "$RUNNER_TEMP/template"
+
+  components:
+    name: Components (shard ${{ matrix.id }})
+    needs: [changes]
+    if: needs.changes.outputs.count != '0'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.changes.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          components: clippy
+          targets: wasm32-wasip2
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          python-version: "3.13"
+          enable-cache: false
+      - uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        id: component-cache
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: components-${{ runner.os }}-${{ env.RUST_TOOLCHAIN }}-shard${{ matrix.id }}-${{ hashFiles('plugins/*/Cargo.lock') }}
+          restore-keys: |
+            components-${{ runner.os }}-${{ env.RUST_TOOLCHAIN }}-shard${{ matrix.id }}-
+            components-${{ runner.os }}-${{ env.RUST_TOOLCHAIN }}-
+      - name: Test, lint, and stage components
+        shell: bash
+        env:
+          PLUGINS_JSON: ${{ toJSON(matrix.plugins) }}
+          STRICT_PLUGINS_JSON: ${{ toJSON(matrix.strict_plugins) }}
+        run: |
+          set -euo pipefail
+          status=0
+          mapfile -t plugins < <(jq -r '.[]' <<< "$PLUGINS_JSON")
+          for plugin in "${plugins[@]}"; do
+            echo "::group::validate $plugin"
+            # Wasm only: the zip is rebuilt from these bytes in `package`,
+            # inside the pinned image, so its digest is decided once.
+            # --wasm-dir stages them as staged/<plugin>/<wasm_path>, the
+            # layout the artifact upload and `package` job both expect.
+            args=(--plugin "$plugin" --wasm-dir staged --skip-package)
+            strict=$(jq -r --arg p "$plugin" 'index($p) != null' <<< "$STRICT_PLUGINS_JSON")
+            if [[ "$strict" != "true" ]]; then
+              # Untouched crates keep their pre-existing rustfmt debt.
+              args+=(--skip-fmt-check)
+            fi
+            if ! uv run --python 3.13 python tools/build_plugins.py "${args[@]}"; then
+              echo "::error::$plugin failed validation"
+              status=1
+            fi
+            echo "::endgroup::"
+          done
+          exit "$status"
+      - name: Save trusted component cache
+        if: github.ref == 'refs/heads/main' && steps.component-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ steps.component-cache.outputs.cache-primary-key }}
+      - name: Upload shard wasm artifacts
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: wasm-shard-${{ matrix.id }}
+          path: |
+            staged/*/*.wasm
+            !staged/*/*.zip
+          if-no-files-found: warn
+          compression-level: 0
+          overwrite: true
+          retention-days: 7
+
+  package:
+    name: Package dry run
+    needs: [changes, components]
+    if: needs.changes.outputs.count != '0'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: wasm-shard-*
+          path: staged
+          merge-multiple: true
+      - name: Collect the built components
+        id: collect
+        shell: bash
+        # PRs only build the touched plugins, so the registry cannot be
+        # rebuilt from them; those runs only prove the digest of what changed.
+        # Pushes (and manual runs) build every plugin and must reproduce the
+        # committed registry byte for byte.
+        run: |
+          set -euo pipefail
+          if [[ "${{ needs.changes.outputs.mode }}" == "changed" ]]; then
+            echo "full=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "full=true" >> "$GITHUB_OUTPUT"
+          fi
+          mapfile -t plugins < <(
+            jq -r '.plugins[] | select(.registry != false) | .name' \
+              <<< '${{ needs.changes.outputs.plugins }}'
+          )
+          for plugin in "${plugins[@]}"; do
+            wasm="staged/$plugin/$plugin.wasm"
+            if [[ ! -f "$wasm" ]]; then
+              # A shard job that failed uploads nothing (if: always()).
+              echo "::notice::$plugin was not built; skipping it"
+              continue
+            fi
+            cp "$wasm" "plugins/$plugin/"
+          done
+          ls -l staged/*/*.wasm || true
+      - name: Rebuild the registry from the shard artifacts
+        shell: bash
+        # Shards produced each plugin's .wasm; re-package in the pinned image
+        # so the digests match what publishing will compute.
+        #
+        # --offline: inherit the entries of registry.json instead of fetching
+        # upstream; the container has no network, and a mid-run upstream edit
+        # must not decide this commit's result. Only entries whose URL is
+        # this repo's release base are recomputed.
+        env:
+          FULL: ${{ steps.collect.outputs.full }}
+        run: |
+          set -euo pipefail
+          if [[ "$FULL" == "true" ]]; then
+            # Every plugin was built: the committed registry must be exactly
+            # what these sources produce.
+            tools/ci/run-packager-python.sh tools/build_plugins.py \
+              --skip-build --package dist --offline --check
+          else
+            # A pull request builds only the touched plugins, so the result
+            # cannot match registry.json as a whole. Render it beside the
+            # commit, inheriting every other entry, and require that the only
+            # change is the plugins this run rebuilt. `registry`, which reads
+            # the committed files, never allows a published entry to change
+            # underneath its version anyway.
+            tools/ci/run-packager-python.sh tools/build_plugins.py \
+              --skip-build --package dist --offline --check \
+              --baseline registry.json \
+              --output "$RUNNER_TEMP/registry.json"
+          fi
+      - name: Upload registry dry run
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: registry-dry-run
+          path: dist/
+          if-no-files-found: error
+          include-hidden-files: true
+          compression-level: 0
+          overwrite: true
+          retention-days: 7
+
+  gate:
+    name: Validate Required Gate
+    if: always()
+    needs: [fmt, changes, registry, wit-drift, template, components, package]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Summarize results
+        if: always()
+        shell: bash
+        env:
+          MODE: ${{ needs.changes.outputs.mode }}
+          COUNT: ${{ needs.changes.outputs.count }}
+        run: |
+          set -euo pipefail
+          {
+            echo "## Validation summary"
+            echo
+            echo "| Job | Result |"
+            echo "|---|---|"
+            echo "| fmt | ${{ needs.fmt.result }} |"
+            echo "| changes | ${{ needs.changes.result }} |"
+            echo "| registry | ${{ needs.registry.result }} |"
+            echo "| wit-drift | ${{ needs.wit-drift.result }} |"
+            echo "| template | ${{ needs.template.result }} |"
+            echo "| components | ${{ needs.components.result }} |"
+            echo "| package | ${{ needs.package.result }} |"
+            echo
+            echo "Plan: \`${MODE:-unavailable}\`, ${COUNT:-0} plugin(s) selected."
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Check required results
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          core_ok="${{ needs.fmt.result == 'success' && needs.changes.result == 'success' && needs.registry.result == 'success' && needs.wit-drift.result == 'success' && needs.template.result == 'success' }}"
+          count="${{ needs.changes.outputs.count }}"
+          components="${{ needs.components.result }}"
+          package="${{ needs.package.result }}"
+
+          valid_dynamic_results=false
+          if [[ "$count" == "0" ]]; then
+            [[ "$components" == "skipped" && "$package" == "skipped" ]] \
+              && valid_dynamic_results=true
+          elif [[ "$count" =~ ^[1-9][0-9]*$ ]]; then
+            [[ "$components" == "success" && "$package" == "success" ]] \
+              && valid_dynamic_results=true
+          fi
+
+          if [[ "$core_ok" != "true" || "$valid_dynamic_results" != "true" ]]; then
+            echo '**Verdict: FAIL — required jobs did not reach their expected terminal states**' >> "$GITHUB_STEP_SUMMARY"
+            echo "::error::Unexpected validation result (count=$count, components=$components, package=$package)"
+            exit 1
+          fi
+          echo '**Verdict: PASS — all deterministic checks green**' >> "$GITHUB_STEP_SUMMARY"
