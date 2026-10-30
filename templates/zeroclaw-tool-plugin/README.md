@@ -113,3 +113,19 @@ immediately, but they are only installable after
 For local iteration, `build_plugins.py` accepts `--skip-tests`,
 `--no-clippy`, `--skip-fmt-check`, and `--skip-metadata`; CI runs all of the
 checks, so do not merge with them skipped.
+
+## Install
+
+Once published, install the plugin with the ZeroClaw host binary you built:
+
+```bash
+zeroclaw plugin install word-count \
+  --registry https://raw.githubusercontent.com/seungjin/hanaclaw-plugins/main/registry.json
+```
+
+Or set the catalog once for every install:
+
+```bash
+export ZEROCLAW_PLUGIN_REGISTRY_URL=https://raw.githubusercontent.com/seungjin/hanaclaw-plugins/main/registry.json
+zeroclaw plugin install word-count
+```
