@@ -350,20 +350,20 @@ jobs:
             jq -r '.plugins[] | select(.registry != false) | .name' \
               <<< '${{ needs.changes.outputs.plugins }}'
           )
-          for plugin in "${plugins[@]}"; do
-            # The artifact path follows the plugin's manifest wasm_path, not
-            # the directory name. `build_plugins.py --wasm-dir staged` writes
-            # to staged/<name>/<wasm_path>, so read that path back here.
+          # The components job uploads `staged/<name>/<wasm_path>`. The exact
+          # path after `download-artifact` depends on the action version and
+          # whether it preserves artifact subdirectories, so discover the wasm
+          # files recursively and copy them back to each plugin directory.
+          find staged -type f -name '*.wasm' | sort | while IFS= read -r wasm; do
+            # The parent directory of the wasm is the plugin name.
+            plugin=$(basename "$(dirname "$wasm")")
             wasm_path=$(python3 -c "import tomllib; print(tomllib.loads(open(f'plugins/$plugin/manifest.toml', 'r').read())['wasm_path'])")
-            wasm="staged/$plugin/$wasm_path"
-            if [[ ! -f "$wasm" ]]; then
-              # A shard job that failed uploads nothing (if: always()).
-              echo "::notice::$plugin was not built; skipping it"
-              continue
-            fi
-            cp "$wasm" "plugins/$plugin/"
+            target="plugins/$plugin/$wasm_path"
+            mkdir -p "plugins/$plugin"
+            cp "$wasm" "$target"
+            echo "collected $plugin -> $target"
           done
-          ls -l staged/*/*.wasm || true
+          ls -l plugins/*/*.wasm || true
       - name: Rebuild the registry from the shard artifacts
         shell: bash
         # Shards produced each plugin's .wasm; re-package in the pinned image
