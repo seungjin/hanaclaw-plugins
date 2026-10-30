@@ -23,24 +23,17 @@ which carries the official plugins and the ones built here.
 ```bash
 # stock ZeroClaw
 zeroclaw plugin install <name> --registry \
-  https://raw.githubusercontent.com/seungjin/hanaclaw-plugins/main/registry.json
+  https://github.com/seungjin/hanaclaw-plugins/releases/download/plugins/registry.json
 
 # your own build: the command is the binary you compiled
 ./target/release/zeroclaw plugin install <name> --registry \
-  https://raw.githubusercontent.com/seungjin/hanaclaw-plugins/main/registry.json
-```
-
-Either raw GitHub URL also works as a release asset after the first publish:
-
-```bash
-zeroclaw plugin install <name> --registry \
   https://github.com/seungjin/hanaclaw-plugins/releases/download/plugins/registry.json
 ```
 
 Or point the host at this catalog once, for every install:
 
 ```bash
-export ZEROCLAW_PLUGIN_REGISTRY_URL=https://raw.githubusercontent.com/seungjin/hanaclaw-plugins/main/registry.json
+export ZEROCLAW_PLUGIN_REGISTRY_URL=https://github.com/seungjin/hanaclaw-plugins/releases/download/plugins/registry.json
 ```
 
 This repository is **originated from and modelled on**
@@ -316,8 +309,6 @@ Install with this registry (the `zeroclaw` in the command is your build of
 the host — this repository ships no binary):
 
 ```bash
-zeroclaw plugin install <name> --registry https://raw.githubusercontent.com/seungjin/hanaclaw-plugins/main/registry.json
-# or, once the release asset exists:
 zeroclaw plugin install <name> --registry https://github.com/seungjin/hanaclaw-plugins/releases/download/plugins/registry.json
 ```
 
