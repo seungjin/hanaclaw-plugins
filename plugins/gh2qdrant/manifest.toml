@@ -1,0 +1,42 @@
+name = "gh2qdrant"
+version = "0.1.0"
+description = "Ingest a GitHub repository into a Qdrant collection"
+author = "seungjin"
+wasm_path = "gh2qdrant.wasm"
+capabilities = ["tool"]
+# socket_client: HTTP to GitHub API, Ollama, and Qdrant.
+# config_read: operator-supplied Qdrant/Ollama URLs and API key.
+permissions = ["config_read", "socket_client"]
+registry = true
+
+[config_schema]
+"$schema" = "https://json-schema.org/draft/2020-12/schema"
+type = "object"
+additionalProperties = false
+
+[config_schema.properties.qdrant_url]
+type = "string"
+format = "uri"
+default = "http://localhost:6333"
+
+[config_schema.properties.qdrant_auth_header]
+type = "string"
+default = "api-key"
+
+[config_schema.properties.ollama_url]
+type = "string"
+format = "uri"
+default = "http://localhost:11434"
+
+[config_schema.properties.embed_model]
+type = "string"
+default = "bge-m3"
+
+[config_schema.properties.batch]
+type = "integer"
+default = 8
+minimum = 1
+
+[config_schema.properties.work_dir]
+type = "string"
+default = "/tmp/gh2qdrant"

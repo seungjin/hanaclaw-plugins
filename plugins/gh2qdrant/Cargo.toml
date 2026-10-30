@@ -1,0 +1,29 @@
+[package]
+name = "gh2qdrant"
+version = "0.1.0"
+edition = "2024"
+description = "ZeroClaw WIT tool plugin: Ingest a GitHub repository into a Qdrant collection"
+publish = false
+# Dual-licensed MIT OR Apache-2.0, like the rest of this catalog. The
+# template ships no license files: copy LICENSE-MIT and LICENSE-APACHE
+# from the repo root if you publish this crate elsewhere.
+license = "MIT OR Apache-2.0"
+
+# cdylib = the wasm component the host loads; rlib = host-run tests for the
+# pure logic in src/core.rs.
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+wit-bindgen = "0.46"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[profile.release]
+opt-level = "s"
+lto = true
+strip = true
+codegen-units = 1
+
+# Standalone crate: built for wasm32-wasip2, not part of a host workspace.
+[workspace]

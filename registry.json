@@ -37,6 +37,17 @@
       "sha256": "a055752f12186f14164cdc56bb35677bb9897d6227967f422187f3d7f52dcda7"
     },
     {
+      "name": "gh2qdrant",
+      "version": "0.1.0",
+      "description": "Ingest a GitHub repository into a Qdrant collection",
+      "author": "seungjin",
+      "capabilities": [
+        "tool"
+      ],
+      "url": "https://github.com/seungjin/hanaclaw-plugins/releases/download/plugins/gh2qdrant-0.1.0.zip",
+      "sha256": "a5b99e79742a9c109fd1245ba7879aa3add7e9e250c354244867a3c8456f1b87"
+    },
+    {
       "name": "gitea",
       "version": "0.3.0",
       "description": "Gitea/Forgejo channel plugin for ZeroClaw: notifications long-poll + issue/PR comment replies over wasi:http.",
