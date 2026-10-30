@@ -121,11 +121,16 @@ Once published, install the plugin with the ZeroClaw host binary you built:
 ```bash
 zeroclaw plugin install word-count \
   --registry https://raw.githubusercontent.com/seungjin/hanaclaw-plugins/main/registry.json
+# or, once the release asset exists:
+zeroclaw plugin install word-count \
+  --registry https://github.com/seungjin/hanaclaw-plugins/releases/download/plugins/registry.json
 ```
 
 Or set the catalog once for every install:
 
 ```bash
 export ZEROCLAW_PLUGIN_REGISTRY_URL=https://raw.githubusercontent.com/seungjin/hanaclaw-plugins/main/registry.json
+# or, after the first publish:
+export ZEROCLAW_PLUGIN_REGISTRY_URL=https://github.com/seungjin/hanaclaw-plugins/releases/download/plugins/registry.json
 zeroclaw plugin install word-count
 ```

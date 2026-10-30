@@ -30,6 +30,13 @@ zeroclaw plugin install <name> --registry \
   https://raw.githubusercontent.com/seungjin/hanaclaw-plugins/main/registry.json
 ```
 
+Either raw GitHub URL also works as a release asset after the first publish:
+
+```bash
+zeroclaw plugin install <name> --registry \
+  https://github.com/seungjin/hanaclaw-plugins/releases/download/plugins/registry.json
+```
+
 Or point the host at this catalog once, for every install:
 
 ```bash
@@ -310,6 +317,8 @@ the host — this repository ships no binary):
 
 ```bash
 zeroclaw plugin install <name> --registry https://raw.githubusercontent.com/seungjin/hanaclaw-plugins/main/registry.json
+# or, once the release asset exists:
+zeroclaw plugin install <name> --registry https://github.com/seungjin/hanaclaw-plugins/releases/download/plugins/registry.json
 ```
 
 ## Recipes
