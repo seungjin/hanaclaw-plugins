@@ -52,8 +52,8 @@ adds missing `name-version.zip` assets (never overwrites bytes).
 
 ```bash
 # `zeroclaw` here is the host binary you built (or stock zeroclaw).
-zeroclaw plugin install hello-from-hana \
-  --registry https://github.com/seungjin/hanaclaw-plugins/releases/download/plugins/registry.json
+export ZEROCLAW_PLUGIN_REGISTRY_URL=https://github.com/seungjin/hanaclaw-plugins/releases/download/plugins/registry.json
+zeroclaw plugin install hello-from-hana
 ```
 
 The model then sees the tool as `hello_from_hana` with an optional `name`

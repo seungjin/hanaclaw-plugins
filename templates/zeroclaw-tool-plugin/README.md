@@ -119,13 +119,13 @@ checks, so do not merge with them skipped.
 Once published, install the plugin with the ZeroClaw host binary you built:
 
 ```bash
-zeroclaw plugin install word-count \
-  --registry https://github.com/seungjin/hanaclaw-plugins/releases/download/plugins/registry.json
-```
-
-Or set the catalog once for every install:
-
-```bash
 export ZEROCLAW_PLUGIN_REGISTRY_URL=https://github.com/seungjin/hanaclaw-plugins/releases/download/plugins/registry.json
 zeroclaw plugin install word-count
+```
+
+Or pass the registry explicitly per command:
+
+```bash
+zeroclaw plugin install word-count \
+  --registry https://github.com/seungjin/hanaclaw-plugins/releases/download/plugins/registry.json
 ```

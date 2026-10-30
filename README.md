@@ -20,20 +20,23 @@ not a separate CLI. There is therefore no `hanaclaw` command: you install with
 the binary you built (or stock `zeroclaw`) plus this catalog's `registry.json`,
 which carries the official plugins and the ones built here.
 
-```bash
-# stock ZeroClaw
-zeroclaw plugin install <name> --registry \
-  https://github.com/seungjin/hanaclaw-plugins/releases/download/plugins/registry.json
-
-# your own build: the command is the binary you compiled
-./target/release/zeroclaw plugin install <name> --registry \
-  https://github.com/seungjin/hanaclaw-plugins/releases/download/plugins/registry.json
-```
-
-Or point the host at this catalog once, for every install:
+**To use this catalog, set your ZeroClaw host to point at its registry once:**
 
 ```bash
 export ZEROCLAW_PLUGIN_REGISTRY_URL=https://github.com/seungjin/hanaclaw-plugins/releases/download/plugins/registry.json
+```
+
+Then install any plugin without repeating the URL:
+
+```bash
+zeroclaw plugin install hello-from-hana
+```
+
+Or pass the registry explicitly per command:
+
+```bash
+zeroclaw plugin install <name> --registry \
+  https://github.com/seungjin/hanaclaw-plugins/releases/download/plugins/registry.json
 ```
 
 This repository is **originated from and modelled on**
@@ -72,7 +75,7 @@ Quick answers:
 | pull upstream's newest catalog entries | `tools/update_zeroclaw_registry.py` |
 | move to a newer WIT contract | `tools/fetch_zeroclaw_wit.py`, then bump versions |
 | check whether anything is stale | `--check` on the build, registry, and WIT tools |
-| install a plugin from this catalog | `zeroclaw plugin install <name> --registry <raw URL>` (binary = your build) |
+| install a plugin from this catalog | `export ZEROCLAW_PLUGIN_REGISTRY_URL=https://github.com/seungjin/hanaclaw-plugins/releases/download/plugins/registry.json`, then `zeroclaw plugin install <name>` |
 
 ## Build: from source to installable plugin
 
@@ -309,7 +312,8 @@ Install with this registry (the `zeroclaw` in the command is your build of
 the host — this repository ships no binary):
 
 ```bash
-zeroclaw plugin install <name> --registry https://github.com/seungjin/hanaclaw-plugins/releases/download/plugins/registry.json
+export ZEROCLAW_PLUGIN_REGISTRY_URL=https://github.com/seungjin/hanaclaw-plugins/releases/download/plugins/registry.json
+zeroclaw plugin install <name>
 ```
 
 ## Recipes
