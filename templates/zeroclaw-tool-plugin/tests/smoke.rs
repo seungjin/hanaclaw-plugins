@@ -3,7 +3,7 @@
 //! Replace this with tests that pin down real behavior; it is deliberately
 //! shallow so a fresh scaffold still passes `cargo test`.
 
-use {{crate_name | snake_case}}::core::{run, ToolInput};
+use {{crate_name | snake_case}}::core::{ToolInput, run};
 
 #[test]
 fn run_accepts_default_input() {

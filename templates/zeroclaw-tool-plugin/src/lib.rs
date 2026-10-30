@@ -26,15 +26,14 @@ mod component {
         features: ["plugins-wit-v0"],
     });
 
-    use crate::plugin_core::{run, ToolInput};
+    use crate::plugin_core::{ToolInput, run};
     use exports::zeroclaw::plugin::plugin_info::Guest as PluginInfo;
     use exports::zeroclaw::plugin::tool::{Guest as Tool, ToolResult};
     use zeroclaw::plugin::logging::{
-        log_record, LogLevel, PluginAction, PluginEvent, PluginOutcome,
+        LogLevel, PluginAction, PluginEvent, PluginOutcome, log_record,
     };
 
     struct {{crate_name | pascal_case}}Plugin;
-
 {% if config_read %}
     /// The host merges this plugin's validated config object into the call
     /// arguments under `__config`, after deleting any model-supplied value of

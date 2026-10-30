@@ -29,13 +29,29 @@ scratch="$workdir/scratch-plugins"
 mkdir -p "$scratch"
 printf '{\n  "plugins": []\n}\n' > "$workdir/registry.json"
 
+# cargo-generate has a bug when a path template is read from inside a larger
+# git repository: for the registry=false + config_read=false combo it fails
+# with "No such file or directory (os error 2)". Work around it by exporting
+# the template into a fresh, standalone git repo and pointing cargo-generate at
+# that isolated copy. The template contents still come from the parent repo's
+# index because we enforce above that templates/ has no unstaged edits.
+tmpl_repo="$workdir/template-repo"
+mkdir -p "$tmpl_repo"
+cp -R templates/zeroclaw-tool-plugin/. "$tmpl_repo/"
+(
+  cd "$tmpl_repo"
+  git init -q
+  git add .
+  git -c user.email=ci@example.com -c user.name=ci commit -q -m "template"
+)
+
 status=0
 for registry in true false; do
   for config_read in true false; do
     name="tmpl-r${registry:0:1}-c${config_read:0:1}"
     echo "::group::template registry=$registry config_read=$config_read"
     if ! cargo generate \
-      --path templates/zeroclaw-tool-plugin \
+      --path "$tmpl_repo" \
       --destination "$scratch" \
       --name "$name" \
       --define "tool_name=greet_model" \

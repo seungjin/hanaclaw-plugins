@@ -29,8 +29,8 @@ impl ToolInput {
     /// Deserialize the injected `__config` object. The host already validated
     /// it against the schema; this only catches plugin/schema drift.
     pub fn with_config(self, raw: &serde_json::Value) -> Result<Self, String> {
-        let cfg: ToolConfig = serde_json::from_value(raw.clone())
-            .map_err(|e| format!("invalid config: {e}"))?;
+        let cfg: ToolConfig =
+            serde_json::from_value(raw.clone()).map_err(|e| format!("invalid config: {e}"))?;
         // TODO: store `cfg` on `self` once `ToolConfig` has fields.
         let _ = cfg;
         Ok(self)
