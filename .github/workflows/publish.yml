@@ -59,6 +59,34 @@ jobs:
           else
             echo "publish=true" >> "$GITHUB_OUTPUT"
           fi
+      - name: Download built wasm artifacts
+        if: steps.freshness.outputs.publish == 'true'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: wasm-shard-*
+          path: staged
+          merge-multiple: true
+      - name: Stage wasm files beside manifests
+        if: steps.freshness.outputs.publish == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "=== downloaded artifact tree ==="
+          find staged -type f | sort || true
+          readarray -d '' -t wasms < <(find staged -type f -name '*.wasm' -print0)
+          if [[ "${#wasms[@]}" -eq 0 ]]; then
+            echo "::warning::No wasm artifacts found in staged/"
+          fi
+          for wasm in "${wasms[@]}"; do
+            plugin=$(basename "$(dirname "$wasm")")
+            wasm_path=$(python3 -c "import tomllib; print(tomllib.loads(open(f'plugins/$plugin/manifest.toml', 'r').read())['wasm_path'])")
+            target="plugins/$plugin/$wasm_path"
+            mkdir -p "plugins/$plugin"
+            cp "$wasm" "$target"
+            echo "collected $plugin -> $target"
+          done
+          echo "=== copied wasm files ==="
+          ls -l plugins/*/*.wasm || true
       - name: Download validated registry dry run
         if: steps.freshness.outputs.publish == 'true'
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
