@@ -93,6 +93,22 @@ jobs:
           gh auth status
           uv run --python 3.13 python tools/publish_plugins.py \
             --no-commit --dist dist
+      - name: Upload registry.json to the release
+        if: steps.freshness.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Publish the registry index as a release asset so installs can use
+          # https://github.com/seungjin/hanaclaw-plugins/releases/download/plugins/registry.json
+          # in addition to the raw GitHub URL. --clobber replaces an existing
+          # asset of the same name; fall back to a plain upload on first use.
+          if gh release view plugins --json assets --jq '.assets[].name' | grep -q '^registry.json$'; then
+            gh release upload plugins registry.json --clobber
+          else
+            gh release upload plugins registry.json
+          fi
       - name: Commit the refreshed registry index
         if: steps.freshness.outputs.publish == 'true'
         env:
