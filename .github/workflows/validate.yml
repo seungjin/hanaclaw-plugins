@@ -354,7 +354,14 @@ jobs:
           # path after `download-artifact` depends on the action version and
           # whether it preserves artifact subdirectories, so discover the wasm
           # files recursively and copy them back to each plugin directory.
-          find staged -type f -name '*.wasm' | sort | while IFS= read -r wasm; do
+          echo "=== downloaded artifact tree ==="
+          find staged -type f | sort || true
+
+          readarray -d '' -t wasms < <(find staged -type f -name '*.wasm' -print0)
+          if [[ "${#wasms[@]}" -eq 0 ]]; then
+            echo "::warning::No wasm artifacts found in staged/"
+          fi
+          for wasm in "${wasms[@]}"; do
             # The parent directory of the wasm is the plugin name.
             plugin=$(basename "$(dirname "$wasm")")
             wasm_path=$(python3 -c "import tomllib; print(tomllib.loads(open(f'plugins/$plugin/manifest.toml', 'r').read())['wasm_path'])")
@@ -363,6 +370,7 @@ jobs:
             cp "$wasm" "$target"
             echo "collected $plugin -> $target"
           done
+          echo "=== copied wasm files ==="
           ls -l plugins/*/*.wasm || true
       - name: Rebuild the registry from the shard artifacts
         shell: bash
