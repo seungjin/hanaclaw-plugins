@@ -1,0 +1,9 @@
+name = "weather"
+version = "0.1.0"
+description = "Get current weather for a city from wttr.in"
+author = "seungjin"
+wasm_path = "weather.wasm"
+capabilities = ["tool"]
+# socket_client: HTTPS request to wttr.in.
+permissions = ["socket_client"]
+registry = true

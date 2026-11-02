@@ -179,6 +179,17 @@
       "sha256": "e335eee01257174ddf526128ad62e283ecbbcd716f3cac70c7aba3553f4ac02c"
     },
     {
+      "name": "weather",
+      "version": "0.1.0",
+      "description": "Get current weather for a city from wttr.in",
+      "author": "seungjin",
+      "capabilities": [
+        "tool"
+      ],
+      "url": "https://github.com/seungjin/hanaclaw-plugins/releases/download/plugins/weather-0.1.0.zip",
+      "sha256": "367d394a1f89eb5cebff6b058ecfd9d3a8c6b18999a3c7cd3d77d3969abe4550"
+    },
+    {
       "name": "wechat",
       "version": "0.4.0",
       "description": "WeChat (iLink Bot) channel plugin for ZeroClaw: getUpdates long-poll + sendMessage over wasi:http.",
