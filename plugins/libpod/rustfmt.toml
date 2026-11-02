@@ -1,0 +1,14 @@
+# Pin rustfmt's default style as the repository contract.
+#
+# rustfmt merges `~/.config/rustfmt/rustfmt.toml` (or $RUSTFMT_CONFIG) into
+# every run, so a contributor's personal config silently decides what
+# `cargo fmt --check` accepts. That is how this repo shipped a tree that
+# passed locally (max_width = 80 in the author's dotfiles) and failed CI,
+# where the runner has no such file and rustfmt uses max_width = 100.
+#
+# Listing the defaults here makes the result independent of HOME. Keep these
+# equal to rustfmt's defaults, which is also what upstream zeroclaw-plugins
+# formats to; do not tune them to a personal style.
+max_width = 100
+hard_tabs = false
+tab_spaces = 4

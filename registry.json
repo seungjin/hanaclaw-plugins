@@ -72,6 +72,17 @@
       "sha256": "162c1cd520f292bd48474c6bbda53d86f4cd00ef8eee3f16c4bd5433e1be45f1"
     },
     {
+      "name": "libpod",
+      "version": "0.1.0",
+      "description": "Control Podman containers and images via the libpod REST API",
+      "author": "seungjin",
+      "capabilities": [
+        "tool"
+      ],
+      "url": "https://github.com/seungjin/hanaclaw-plugins/releases/download/plugins/libpod-0.1.0.zip",
+      "sha256": "2395b8cbce7f5a694bd7ec1acecaf296cbdd5af743db163b256af7f03f25cd6a"
+    },
+    {
       "name": "matrix",
       "version": "0.3.0",
       "description": "Matrix channel plugin for ZeroClaw: Client-Server sync + text send over wasi:http.",

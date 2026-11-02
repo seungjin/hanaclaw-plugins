@@ -1,0 +1,27 @@
+name = "libpod"
+version = "0.1.0"
+description = "Control Podman containers and images via the libpod REST API"
+author = "seungjin"
+wasm_path = "libpod.wasm"
+capabilities = ["tool"]
+# socket_client: HTTP to the Podman libpod REST API over TCP.
+# config_read: operator-supplied API base URL and version.
+permissions = ["socket_client", "config_read"]
+registry = true
+
+# config_read and config_schema are a biconditional: the host rejects a
+# manifest carrying one without the other. Every key must default so a
+# withheld grant (which injects `{}`) still validates.
+[config_schema]
+"$schema" = "https://json-schema.org/draft/2020-12/schema"
+type = "object"
+additionalProperties = false
+
+[config_schema.properties.api_url]
+type = "string"
+format = "uri"
+default = "http://127.0.0.1:8888"
+
+[config_schema.properties.api_version]
+type = "string"
+default = "v5.0"
