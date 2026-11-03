@@ -68,17 +68,12 @@ does.
 ### Package and publish
 
 The generated crate ships its own copy of the ZeroClaw WIT contract under
-`wit/v0/`, so standalone projects build immediately:
+`wit/v0/`, refreshed from upstream during generation, so standalone
+projects build immediately:
 
 ```bash
 cd word-count
 cargo build --target wasm32-wasip2 --release
-```
-
-To refresh the bundled contract from upstream later, run:
-
-```bash
-./scripts/update-wit.sh
 ```
 
 A ZeroClaw plugin package is a reproducible zip containing:
