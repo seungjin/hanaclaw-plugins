@@ -2,7 +2,7 @@
 
 ZeroClaw **tool plugin** that controls Podman via the [libpod REST API](https://docs.podman.io/en/latest/_static/api.html).
 
-Written with AI/LLM assistance (OpenAI Codex, `deepseek-v4.1-flash`); see the
+Written with AI/LLM assistance; see the
 repository's [NOTICE](../../NOTICE). Licensed MIT OR Apache-2.0; the crate
 declares `license = "MIT OR Apache-2.0"` and ships no license files of its own
 (they live at the repository root).
