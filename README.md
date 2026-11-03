@@ -76,6 +76,98 @@ Quick answers:
 | check whether anything is stale | `--check` on the build, registry, and WIT tools |
 | install a plugin from this catalog | `export ZEROCLAW_PLUGIN_REGISTRY_URL=https://github.com/seungjin/hanaclaw-plugins/releases/download/plugins/registry.json`, then `zeroclaw plugin install <name>` |
 
+## Writing a plugin
+
+This repository is a personal extension of
+[zeroclaw-labs/zeroclaw-plugins](https://github.com/zeroclaw-labs/zeroclaw-plugins):
+it keeps the upstream catalog and adds my own plugins under `plugins/`.
+New local plugins use the same WIT contract, layout, and reproducible packaging
+contract as upstream, so they can live side-by-side with upstream entries in the
+same `registry.json`.
+
+### Scaffold a new tool plugin with `cargo generate`
+
+`templates/zeroclaw-tool-plugin/` is a
+[`cargo generate`](https://github.com/cargo-generate/cargo-generate) template.
+It creates a new `plugins/<name>/` crate with the exact structure this repo
+expects:
+
+- `src/core.rs` -- pure plugin logic, host-testable, no WIT boilerplate.
+- `src/lib.rs` -- a thin `#[cfg(target_family = "wasm")]` component shim that
+  binds the repository-wide `wit/v0` contract.
+- `tests/smoke.rs` -- host-run integration tests.
+- `manifest.toml` -- name, version, wasm path, capabilities, permissions.
+- `Cargo.toml` -- standalone workspace with the pinned `rust-toolchain.toml`.
+
+Prerequisite (once):
+
+```bash
+rustup target add wasm32-wasip2
+```
+
+Generate a new plugin from the repo root:
+
+```bash
+cargo generate --path templates/zeroclaw-tool-plugin --destination plugins \
+  --name word-count \
+  --define tool_name=word_count \
+  --define tool_description="Count words in text" \
+  --define author=seungjin \
+  --define registry=true \
+  --define config_read=false
+```
+
+- `--name` is the crate/project name; it must be **kebab-case** and becomes the
+  directory under `plugins/`.
+- `tool_name` is what the model calls; it must be **snake_case** and must not
+  contain `__`.
+- `registry=true` makes the plugin publishable; `registry=false` keeps it out
+  of `registry.json`.
+- `config_read=true` adds the `config_read` capability, a `[config_schema]`,
+  and the config plumbing in the generated argument structs.
+
+`cargo generate` reads the template from the git index, so stage any template
+changes first (`git add templates/`) before generating.
+
+### Implement and build
+
+Edit the generated files:
+
+1. `plugins/word-count/src/core.rs` -- implement the tool behavior.
+2. `plugins/word-count/src/lib.rs` -- adjust the WIT-bound argument structs if
+   you added or removed fields.
+3. `plugins/word-count/manifest.toml` -- bump version, edit description, or
+   change capabilities if needed.
+
+Then build, test, package, and refresh the registry:
+
+```bash
+uv run --python 3.13 python tools/build_plugins.py --package --plugin word-count
+```
+
+If this is the first build for the new crate, a `Cargo.lock` is created;
+commit it immediately. The build produces `plugins/word-count/word_count.wasm`
+(gitignored) and `dist/word-count-0.1.0.zip`, and adds an entry to
+`registry.json`.
+
+### Publish
+
+Upload the zip to the `plugins` release and commit the refreshed registry:
+
+```bash
+uv run --python 3.13 python tools/publish_plugins.py --dry-run
+uv run --python 3.13 python tools/publish_plugins.py
+```
+
+### Next steps
+
+- Read the worked example: [`plugins/hello-from-hana/README.md`](./plugins/hello-from-hana/README.md).
+- Read the template's own guide: [`templates/zeroclaw-tool-plugin/README.md`](./templates/zeroclaw-tool-plugin/README.md).
+- Never hand-edit `registry.json`; always let `tools/build_plugins.py` or
+  `tools/publish_plugins.py` regenerate it.
+- If you change a plugin that was already published, bump `version` in **both**
+  `manifest.toml` and `Cargo.toml` first; published identities are immutable.
+
 ## Build: from source to installable plugin
 
 One command formats, tests, lints, builds every publishable plugin for
