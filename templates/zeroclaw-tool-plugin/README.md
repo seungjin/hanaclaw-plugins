@@ -66,30 +66,18 @@ does.
 
 ### Package and publish
 
-The generated crate expects a ZeroClaw WIT contract at `wit/v0` relative to the
-project root. For standalone use, vendor or link your own copy of the contract.
-The upstream contract lives at
-`https://github.com/zeroclaw-labs/zeroclaw-plugins/tree/main/wit/v0`.
-
-After generating the project, copy the upstream WIT files into it and adjust
-the `wit_bindgen::generate!` path in `src/lib.rs`:
+The generated crate ships its own copy of the ZeroClaw WIT contract under
+`wit/v0/`. This makes standalone projects build immediately:
 
 ```bash
 cd word-count
-cp -R /path/to/zeroclaw-plugins/wit/v0 wit/v0
+cargo build --target wasm32-wasip2 --release
 ```
 
-Then change this line in `src/lib.rs`:
-
-```rust
-path: "../../wit/v0",
-```
-
-to:
-
-```rust
-path: "./wit/v0",
-```
+If you are adding the plugin to `hanaclaw-plugins` and want to share the
+repository-wide contract instead, delete the generated `wit/v0/` directory
+and change the `wit_bindgen::generate!` path in `src/lib.rs` from
+`"./wit/v0"` to `"../../wit/v0"`.
 
 A ZeroClaw plugin package is a reproducible zip containing:
 
