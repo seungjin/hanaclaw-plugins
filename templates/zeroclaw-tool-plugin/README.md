@@ -33,22 +33,6 @@ cargo generate --git https://github.com/seungjin/hanaclaw-plugins \
   --define config_read=false
 ```
 
-Or, if you are working inside a clone of `hanaclaw-plugins`, generate from the
-local path:
-
-```bash
-cargo generate --path templates/zeroclaw-tool-plugin \
-  --name word-count \
-  --define tool_name=word_count \
-  --define tool_description="Count words in text" \
-  --define author=seungjin \
-  --define registry=true \
-  --define config_read=false
-```
-
-`cargo generate` reads the local `--path` template from the git index, so stage
-template changes (`git add templates/`) before generating from a local clone.
-
 Omitted `--define` values are prompted for. `--name` is the project name; it
 must be **kebab-case** (the host rejects other plugin names) and becomes the
 crate name, the `manifest.toml` `name`, and (snake_cased) the `wasm_path`.
