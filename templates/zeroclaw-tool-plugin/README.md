@@ -71,6 +71,26 @@ project root. For standalone use, vendor or link your own copy of the contract.
 The upstream contract lives at
 `https://github.com/zeroclaw-labs/zeroclaw-plugins/tree/main/wit/v0`.
 
+After generating the project, copy the upstream WIT files into it and adjust
+the `wit_bindgen::generate!` path in `src/lib.rs`:
+
+```bash
+cd word-count
+cp -R /path/to/zeroclaw-plugins/wit/v0 wit/v0
+```
+
+Then change this line in `src/lib.rs`:
+
+```rust
+path: "../../wit/v0",
+```
+
+to:
+
+```rust
+path: "./wit/v0",
+```
+
 A ZeroClaw plugin package is a reproducible zip containing:
 
 ```
