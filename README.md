@@ -105,10 +105,24 @@ Prerequisite (once):
 rustup target add wasm32-wasip2
 ```
 
-Generate a new plugin from the repo root:
+Generate a new plugin from the repo root (using the local template):
 
 ```bash
 cargo generate --path templates/zeroclaw-tool-plugin --destination plugins \
+  --name word-count \
+  --define tool_name=word_count \
+  --define tool_description="Count words in text" \
+  --define author=seungjin \
+  --define registry=true \
+  --define config_read=false
+```
+
+Or generate from the GitHub repository directly (no local clone needed):
+
+```bash
+cargo generate --git https://github.com/seungjin/hanaclaw-plugins \
+  --subfolder templates/zeroclaw-tool-plugin \
+  --destination plugins \
   --name word-count \
   --define tool_name=word_count \
   --define tool_description="Count words in text" \
@@ -126,8 +140,9 @@ cargo generate --path templates/zeroclaw-tool-plugin --destination plugins \
 - `config_read=true` adds the `config_read` capability, a `[config_schema]`,
   and the config plumbing in the generated argument structs.
 
-`cargo generate` reads the template from the git index, so stage any template
-changes first (`git add templates/`) before generating.
+When you use the local `--path` template, `cargo generate` reads the template
+from the git index, so stage any template changes first (`git add templates/`)
+before generating.
 
 ### Implement and build
 
