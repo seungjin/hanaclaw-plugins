@@ -37,10 +37,9 @@ If no JSON is supplied on stdin, the harness passes `{}`.
 
 * This is a debugging/development helper, **not** the supported runtime.
   For real use, load the plugin into the ZeroClaw host binary.
-* The harness links a full WASI Preview 2 implementation. If the plugin was
-  built with a `wit-bindgen` / WASI version that differs from the wasmtime
-  version used here, you may see linker errors about `wasi:io/poll` or other
-  WASI resource mismatches. In that case, use the same wasmtime version as the
-  ZeroClaw host, or test the plugin with the host itself.
-* Sockets and WebSocket imports panic if the plugin calls them. Logging
-  records are printed to stderr.
+* The harness links a full WASI Preview 2 implementation. It is pinned to
+  the same `wasmtime`/`wasmtime-wasi` 48.x line used by the ZeroClaw host,
+  so plugins built against `wit/v0` should link without resource mismatches.
+* Sockets are implemented with real TCP/TLS (via `rustls`) for HTTP-style
+  requests. WebSocket imports still panic if the plugin calls them.
+* Logging records are printed to stderr.

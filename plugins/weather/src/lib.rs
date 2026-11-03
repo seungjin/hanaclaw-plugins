@@ -180,15 +180,60 @@ mod component {
 
         let body = String::from_utf8_lossy(&response);
         let body = extract_http_body(&body)?;
-        Ok(run(input, body))
+        Ok(run(input, &body))
     }
 
-    /// Strip the HTTP response headers and return the body.
-    fn extract_http_body(response: &str) -> Result<&str, String> {
-        let (_headers, body) = response
+    /// Strip the HTTP response headers and return the body. If the response
+    /// uses `Transfer-Encoding: chunked`, decode the chunks before returning.
+    fn extract_http_body(response: &str) -> Result<String, String> {
+        let (headers, body) = response
             .split_once("\r\n\r\n")
             .ok_or("invalid HTTP response: no header/body delimiter")?;
-        Ok(body)
+
+        let is_chunked = headers
+            .lines()
+            .skip(1)
+            .find(|line| {
+                let line = line.to_ascii_lowercase();
+                line.starts_with("transfer-encoding:") && line.contains("chunked")
+            })
+            .is_some();
+
+        if !is_chunked {
+            return Ok(body.to_string());
+        }
+
+        decode_chunked(body)
+    }
+
+    /// Decode an HTTP/1.1 chunked body into a plain string.
+    fn decode_chunked(body: &str) -> Result<String, String> {
+        let mut decoded = String::new();
+        let mut remaining = body;
+
+        loop {
+            // Each chunk: "<hex-size>[; ext]*\r\n<data>\r\n"
+            let (size_line, rest) = remaining
+                .split_once("\r\n")
+                .ok_or("invalid chunked body: missing chunk size line")?;
+            let size_hex = size_line.split(';').next().unwrap_or("").trim();
+            let size = usize::from_str_radix(size_hex, 16)
+                .map_err(|_| format!("invalid chunked body: bad chunk size `{size_hex}`"))?;
+
+            if size == 0 {
+                break;
+            }
+
+            if rest.len() < size + 2 {
+                return Err("invalid chunked body: truncated chunk data".to_string());
+            }
+            decoded.push_str(&rest[..size]);
+
+            // Skip the chunk data plus trailing \r\n.
+            remaining = &rest[size + 2..];
+        }
+
+        Ok(decoded)
     }
 
     export!(WeatherPlugin);

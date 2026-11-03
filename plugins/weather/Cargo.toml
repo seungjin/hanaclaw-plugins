@@ -1,6 +1,6 @@
 [package]
 name = "weather"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 description = "ZeroClaw WIT tool plugin: Get current weather for a city from wttr.in"
 publish = false

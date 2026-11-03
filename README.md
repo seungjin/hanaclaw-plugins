@@ -55,6 +55,7 @@ tools/publish_plugins.py           # upload zips to the release, verify, commit
 tools/update_zeroclaw_registry.py  # upstream half only (no build)
 tools/fetch_zeroclaw_wit.py        # vendor / update wit/<version>/
 tools/pluginpack.py                # shared zip, manifest, and digest contract
+tools/wasmtime-harness/            # standalone wasmtime runner for local plugin testing
 tools/ci/                          # CI helpers (see CI section) + packager image pin
 rust-toolchain.toml                # pinned compiler (every plugin pins it too)
 rustfmt.toml                       # pinned formatting (rustfmt's defaults)
@@ -74,6 +75,7 @@ Quick answers:
 | pull upstream's newest catalog entries | `tools/update_zeroclaw_registry.py` |
 | move to a newer WIT contract | `tools/fetch_zeroclaw_wit.py`, then bump versions |
 | check whether anything is stale | `--check` on the build, registry, and WIT tools |
+| run a plugin locally without the full host | `cd tools/wasmtime-harness && cargo run --release -- /path/to/plugin.wasm < args.json` |
 | install a plugin from this catalog | `export ZEROCLAW_PLUGIN_REGISTRY_URL=https://github.com/seungjin/hanaclaw-plugins/releases/download/plugins/registry.json`, then `zeroclaw plugin install <name>` |
 
 ## Writing a plugin
@@ -179,6 +181,26 @@ Upload the zip to the `plugins` release and commit the refreshed registry:
 uv run --python 3.13 python tools/publish_plugins.py --dry-run
 uv run --python 3.13 python tools/publish_plugins.py
 ```
+
+### Run a plugin without the ZeroClaw host
+
+For quick iteration you can exercise a built `.wasm` with the standalone
+`wasmtime-harness` in `tools/wasmtime-harness/`. It is pinned to the same
+`wasmtime` 48.x line as the ZeroClaw host, stubs all host imports (logging,
+config, state, secrets, sockets, websocket, WASI), and calls the plugin's
+metadata exports plus `execute` with JSON from stdin.
+
+```bash
+cd tools/wasmtime-harness
+cargo build --release
+cargo run --release -- \
+  ../../plugins/word-count/word_count.wasm \
+  < '{"text":"hello world"}'
+```
+
+See [`tools/wasmtime-harness/README.md`](./tools/wasmtime-harness/README.md) for
+full usage and caveats. This is a debugging helper only — the supported
+runtime is still the ZeroClaw host binary.
 
 ### Next steps
 
@@ -560,6 +582,7 @@ Deviations from upstream's workflows, deliberate:
 | `--offline` registry keeps an old version that no plugin builds | Fixed: entries under this repo's own release base are now dropped when no manifest produces them. If you still see one, it is upstream's and needs `--retirements`. |
 | `publish_plugins.py` reports a missing dist zip | Run `tools/build_plugins.py --package` first; publishing never builds. |
 | `cargo generate` ignores template edits | It reads the template from the git index: `git add templates/` first. |
+| `wasi:io/poll` resource mismatch in `wasmtime-harness` | The harness is pinned to wasmtime 48.x; rebuild the plugin against `wit/v0` with the pinned toolchain (`tools/build_plugins.py`). |
 
 ## WIT contract
 

@@ -65,6 +65,21 @@ would make `cargo test` try to execute a wasm module. Always pass
 `--target wasm32-wasip2` when building the component, exactly as upstream CI
 does.
 
+### Run the built wasm locally
+
+For quick smoke-testing you can run the built `.wasm` with the standalone
+`wasmtime-harness` from the `hanaclaw-plugins` repository (or copy it into
+your own project). It is pinned to the same `wasmtime` 48.x line as the
+ZeroClaw host:
+
+```bash
+cd /path/to/hanaclaw-plugins/tools/wasmtime-harness
+cargo run --release --   /path/to/word-count/target/wasm32-wasip2/release/word_count.wasm   < '{"text":"hello world"}'
+```
+
+See `tools/wasmtime-harness/README.md` for full usage. This is a debugging
+helper only; the supported runtime is the ZeroClaw host binary.
+
 ### Package and publish
 
 The generated crate ships its own copy of the ZeroClaw WIT contract under

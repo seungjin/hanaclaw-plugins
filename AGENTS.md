@@ -54,6 +54,9 @@ Dual license: MIT OR Apache-2.0 at the recipient's option.
   `run-packager-python.sh`, `packager-image.txt` (pinned digest).
 * `tools/pluginpack.py` — shared packaging/validation contract (zip format,
   manifest validation, registry rendering). Change it in one place only.
+* `tools/wasmtime-harness/` — standalone wasmtime runner for local plugin
+  testing. Pinned to the ZeroClaw host's wasmtime line; stubs all host imports
+  and calls `execute` with JSON from stdin. Not a substitute for the host.
 
 ## Docs map
 Update the matching doc whenever behavior changes:
@@ -107,6 +110,9 @@ Run Python only through `uv` (never bare `python`/`python3`); keep
 * `uv run --python 3.13 python tools/publish_plugins.py --verify-only`
   — re-download and check every local registry URL (read-only, no `gh`
   release rights needed beyond read access).
+* `cd tools/wasmtime-harness && cargo run --release -- /path/to/plugin.wasm < args.json`
+  — run a built `.wasm` locally without the full ZeroClaw host. Useful for
+  smoke-testing metadata and `execute`.
 * Release contract: there is no plugin server and no `releases/release.json`;
   each `url` is a GitHub Release asset
   `…/releases/download/plugins/<name>-<version>.zip`. The release tag is fixed

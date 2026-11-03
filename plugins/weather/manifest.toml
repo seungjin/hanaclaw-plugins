@@ -1,5 +1,5 @@
 name = "weather"
-version = "0.1.0"
+version = "0.1.1"
 description = "Get current weather for a city from wttr.in"
 author = "seungjin"
 wasm_path = "weather.wasm"
