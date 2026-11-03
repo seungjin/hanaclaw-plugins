@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
-# Publish a standalone ZeroClaw tool plugin to a GitHub Release.
-# Usage: ./scripts/publish.sh [RELEASE_TAG]
-# Default RELEASE_TAG is "plugins".
+# Build, package, and emit a ZeroClaw tool plugin release locally.
+# Usage: ./scripts/release.sh
+# Outputs to dist/:
+#   <name>-<version>.zip
+#   <name>-<version>.zip.sha256
+#   <name>-<version>.zip.minisig   (if minisign is available)
 set -euo pipefail
 
-RELEASE_TAG="${1:-plugins}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 cd "${PROJECT_DIR}"
@@ -26,6 +28,7 @@ fi
 
 ZIP_NAME="${NAME}-${VERSION}.zip"
 ZIP_PATH="dist/${ZIP_NAME}"
+SHA_PATH="${ZIP_PATH}.sha256"
 mkdir -p dist
 
 # --- build wasm ---
@@ -41,7 +44,7 @@ fi
 # --- package zip (deterministic layout, fixed timestamp) ---
 # Layout: <name>/manifest.toml + <name>/<wasm_path>
 echo "==> Packaging ${ZIP_PATH} ..."
-rm -f "${ZIP_PATH}"
+rm -f "${ZIP_PATH}" "${SHA_PATH}" "${ZIP_PATH}.minisig"
 python3 - "${NAME}" "${ZIP_PATH}" manifest.toml "${WASM_SRC}" "${WASM_PATH}" <<'PY'
 import os, sys, zipfile
 
@@ -53,50 +56,37 @@ with zipfile.ZipFile(zip_path, 'w', compression=zipfile.ZIP_DEFLATED) as zf:
     for src, arcname in [(manifest_src, f"{name}/manifest.toml"),
                          (wasm_src, f"{name}/{wasm_name}")]:
         zf.write(src, arcname)
-        # Force deterministic date/time.
         info = zf.getinfo(arcname)
         info.date_time = FIXED_TIME
 PY
 
+# --- checksum ---
 SHA256="$(sha256sum "${ZIP_PATH}" | awk '{print $1}')"
+echo "${SHA256}  ${ZIP_NAME}" > "${SHA_PATH}"
 echo "==> sha256: ${SHA256}"
 
-# --- upload to GitHub release ---
-if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
-    echo "==> Ensuring GitHub release '${RELEASE_TAG}' exists ..."
-    gh release view "${RELEASE_TAG}" >/dev/null 2>&1 || \
-        gh release create "${RELEASE_TAG}" --title "Plugin artifacts" --notes "ZeroClaw plugin artifacts"
+# --- sign (optional) ---
+if command -v minisign >/dev/null 2>&1; then
+    echo "==> Signing with minisign ..."
+    minisign -Sm "${ZIP_PATH}" -x "${ZIP_PATH}.minisig"
+else
+    echo "==> minisign not found; skipping signature. Install minisign to produce .minisig files."
+fi
 
-    echo "==> Uploading ${ZIP_NAME} to release '${RELEASE_TAG}' ..."
-    gh release upload "${RELEASE_TAG}" "${ZIP_PATH}" --clobber
-
-    REMOTE_URL="$(git remote get-url origin 2>/dev/null || true)"
-    if [[ -n "${REMOTE_URL}" ]]; then
-        # Convert git@host:owner/repo.git to https://host/owner/repo
-        REPO_URL="$(echo "${REMOTE_URL}" | sed -E 's|^git@([^:]+):|https://\1/|; s|\.git$||')"
-        ASSET_URL="${REPO_URL}/releases/download/${RELEASE_TAG}/${ZIP_NAME}"
-        echo ""
-        echo "==> Published asset:"
-        echo "    ${ASSET_URL}"
-        echo ""
-        echo "==> Registry entry snippet:"
-        cat <<JSON
+# --- print registry snippet ---
+echo ""
+echo "==> Release artifacts in ${PROJECT_DIR}/dist/:"
+ls -la "dist/"
+echo ""
+echo "==> Registry entry snippet (update description/author/capabilities as needed):"
+cat <<JSON
 {
   "name": "${NAME}",
   "version": "${VERSION}",
   "description": "UPDATE_ME",
   "author": "UPDATE_ME",
   "capabilities": ["tool"],
-  "url": "${ASSET_URL}",
+  "url": "UPDATE_ME",
   "sha256": "${SHA256}"
 }
 JSON
-    fi
-else
-    echo ""
-    echo "==> gh is not authenticated; upload skipped."
-    echo "    Zip: ${ZIP_PATH}"
-    echo "    sha256: ${SHA256}"
-    echo "    Upload manually with:"
-    echo "      gh release upload ${RELEASE_TAG} ${ZIP_PATH}"
-fi
