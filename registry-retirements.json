@@ -197,6 +197,12 @@
       "version": "0.2.0",
       "sha256": "6fb3132b556d44cd325779ed5c1e11b3878eb045d65a83de6b42a038963a9338",
       "reason": "Does not install on ZeroClaw v0.8.6: the manifest requests config_read without a config_schema, and the component exports the configure(config) channel function that v0.8.6 replaced with typed config."
+    },
+    {
+      "name": "mastodon",
+      "version": "0.1.1",
+      "sha256": "49d2720017b7b6aaef1e53d145a2f0b959dc010c247019f8e1e5702bd87ffda5",
+      "reason": "Digest was computed by the host Python (non-stock zlib); superseded by 0.1.2 packaged inside the pinned docker.io/library/python image so CI and the release agree byte-for-byte."
     }
   ]
 }
