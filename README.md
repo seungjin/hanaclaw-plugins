@@ -105,10 +105,7 @@ Prerequisite (once):
 rustup target add wasm32-wasip2
 ```
 
-Generate a new plugin directly from the GitHub repository (no local clone needed).
-Run this from the repository root; `cargo generate` will create a `word-count/`
-directory next to `plugins/`, which you then move into `plugins/` so the WIT path
-`../../wit/v0` resolves correctly:
+Generate a new plugin directly from the GitHub repository (no local clone needed):
 
 ```bash
 cargo generate --git https://github.com/seungjin/hanaclaw-plugins \
@@ -119,18 +116,39 @@ cargo generate --git https://github.com/seungjin/hanaclaw-plugins \
   --define author=seungjin \
   --define registry=true \
   --define config_read=false
-
-mv word-count plugins/
 ```
 
-- `--name` is the crate/project name; it must be **kebab-case** and becomes the
-  directory under `plugins/`.
+- `--name` is the crate/project name; it must be **kebab-case**.
 - `tool_name` is what the model calls; it must be **snake_case** and must not
   contain `__`.
 - `registry=true` makes the plugin publishable; `registry=false` keeps it out
   of `registry.json`.
 - `config_read=true` adds the `config_read` capability, a `[config_schema]`,
   and the config plumbing in the generated argument structs.
+
+#### Adding the plugin to this repository
+
+If you want the new plugin to live in `hanaclaw-plugins` and be built by
+`tools/build_plugins.py`, run the command above from the repository root,
+then move the generated directory into `plugins/`:
+
+```bash
+mv word-count plugins/
+```
+
+This keeps the generated WIT binding path `../../wit/v0` correct and lets the
+build tools discover the plugin from its `plugins/<name>/manifest.toml`.
+
+#### Using the template for a standalone project
+
+If you are starting an independent plugin project, skip the `mv` step and use
+the generated crate as-is. You will need to:
+
+1. Provide your own copy of the ZeroClaw WIT contract (or adjust the
+   `wit_bindgen::generate!` path in `src/lib.rs`).
+2. Build and package the component yourself, or adapt the packaging logic in
+   `tools/pluginpack.py` for your project.
+3. Publish the resulting zip to a registry URL your ZeroClaw host can fetch.
 
 ### Implement and build
 
