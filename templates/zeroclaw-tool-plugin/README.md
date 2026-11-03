@@ -1,22 +1,30 @@
 # zeroclaw-tool-plugin (cargo generate template)
 
-Scaffolds a ZeroClaw **WIT tool plugin** in the shape the registry requires:
-pure core, thin wasm shim, host-run tests, and a manifest. It mirrors the
-layout of `zeroclaw-labs/zeroclaw-plugins/plugins/redact-text` (the canonical
+Scaffolds a ZeroClaw **WIT tool plugin**: pure core, thin wasm shim,
+host-run tests, and a manifest. It mirrors the layout of
+`zeroclaw-labs/zeroclaw-plugins/plugins/redact-text` (the canonical upstream
 reference plugin), on edition 2024 with `wit-bindgen` 0.46.
 
-Generated crates carry `license = "MIT OR Apache-2.0"`, matching this repo;
-the template does not copy `LICENSE-MIT`/`LICENSE-APACHE` into the new crate,
-so copy them from the repository root if you publish the crate on its own.
+This template is part of [hanaclaw-plugins](https://github.com/seungjin/hanaclaw-plugins),
+a personal extension of
+[zeroclaw-labs/zeroclaw-plugins](https://github.com/zeroclaw-labs/zeroclaw-plugins).
+It is also usable on its own for independent plugin projects.
 
 ## Usage
 
-From the repository root:
+### Generate the project
+
+Prerequisite (once):
 
 ```bash
-rustup target add wasm32-wasip2   # once
+rustup target add wasm32-wasip2
+```
 
-cargo generate --path templates/zeroclaw-tool-plugin --destination plugins \
+Generate from this GitHub repository:
+
+```bash
+cargo generate --git https://github.com/seungjin/hanaclaw-plugins \
+  templates/zeroclaw-tool-plugin \
   --name word-count \
   --define tool_name=word_count \
   --define tool_description="Count words in text" \
@@ -25,26 +33,70 @@ cargo generate --path templates/zeroclaw-tool-plugin --destination plugins \
   --define config_read=false
 ```
 
-`cargo generate` reads the template from the git index, so stage template
-changes (`git add templates/`) before generating.
-
-Then edit `plugins/word-count/src/core.rs` (and the argument struct in
-`src/lib.rs`) and build. One command formats, tests, lints, builds, packages,
-and refreshes `registry.json`:
+Or, if you are working inside a clone of `hanaclaw-plugins`, generate from the
+local path:
 
 ```bash
-uv run --python 3.13 python tools/build_plugins.py --package --plugin word-count
-uv run --python 3.13 python tools/publish_plugins.py     # upload + verify
+cargo generate --path templates/zeroclaw-tool-plugin \
+  --name word-count \
+  --define tool_name=word_count \
+  --define tool_description="Count words in text" \
+  --define author=seungjin \
+  --define registry=true \
+  --define config_read=false
 ```
 
-The template vendors **no** WIT: the crate binds the repository-wide contract
-with `path: "../../wit/v0"` (the layout upstream uses), so refreshing
-`wit/v0` once with `tools/fetch_zeroclaw_wit.py` updates every plugin.
+`cargo generate` reads the local `--path` template from the git index, so stage
+template changes (`git add templates/`) before generating from a local clone.
 
 Omitted `--define` values are prompted for. `--name` is the project name; it
-must be kebab-case (the host rejects other plugin names) and becomes the crate
-name, the `manifest.toml` `name`, and (snake_cased) the `wasm_path`.
-`--destination plugins` is a path, not a template placeholder.
+must be **kebab-case** (the host rejects other plugin names) and becomes the
+crate name, the `manifest.toml` `name`, and (snake_cased) the `wasm_path`.
+
+### Edit and build
+
+After generation, edit:
+
+- `src/core.rs` -- implement the tool logic.
+- `src/lib.rs` -- adjust the WIT-bound argument structs if you changed the
+  tool signature.
+- `manifest.toml` -- update `description`, `version`, or capabilities if
+  needed.
+
+Run host tests without any wasm toolchain:
+
+```bash
+cargo test
+```
+
+Build the wasm component:
+
+```bash
+cargo build --target wasm32-wasip2 --release
+```
+
+There is deliberately **no** `.cargo/config.toml`: a default build target
+would make `cargo test` try to execute a wasm module. Always pass
+`--target wasm32-wasip2` when building the component, exactly as upstream CI
+does.
+
+### Package and publish
+
+The generated crate expects a ZeroClaw WIT contract at `wit/v0` relative to the
+project root. For standalone use, vendor or link your own copy of the contract.
+The upstream contract lives at
+`https://github.com/zeroclaw-labs/zeroclaw-plugins/tree/main/wit/v0`.
+
+A ZeroClaw plugin package is a reproducible zip containing:
+
+```
+<name>/manifest.toml
+<name>/<wasm_path>
+```
+
+Build the zip however your project packages components, publish it to a URL
+your ZeroClaw host can fetch, and add the entry to your registry with the
+matching `sha256` of the zip.
 
 ## What it generates
 
@@ -59,12 +111,7 @@ tests/smoke.rs       # host-run integration test
 ```
 
 No `Cargo.lock` is generated: the first build creates it and every later
-cargo invocation is `--locked`. Commit it as soon as it exists.
-
-There is deliberately **no** `.cargo/config.toml`: a default build target
-would make `cargo test` try to execute a wasm module. Pass
-`--target wasm32-wasip2` when building the component, exactly as upstream CI
-does.
+cargo invocation should be `--locked`. Commit it as soon as it exists.
 
 ## Options
 
@@ -74,12 +121,12 @@ does.
 | `tool_name` | prompted | snake_case tool the model calls; no `__` |
 | `tool_description` | prompted | model-facing description |
 | `author` | `you` | `manifest.toml` author |
-| `registry` | `false` (prompt default) | `true` = publishable; `false` writes `registry = false`, so the build and the registry skip it entirely |
+| `registry` | `false` (prompt default) | `true` = publishable; `false` writes `registry = false`, so the registry skips it entirely |
 | `config_read` | `false` | adds the `config_read` permission **and** `[config_schema]`, plus the `__config` plumbing in `ExecuteArgs`/`ToolInput::with_config` |
 
-Pass `registry=true` explicitly (as in the usage above) for a plugin you
-intend to publish; answer `false` while the plugin is work in progress, or
-delete the `registry = false` line later.
+Pass `registry=true` explicitly for a plugin you intend to publish; answer
+`false` while the plugin is work in progress, or delete the `registry = false`
+line later.
 
 ### Config
 
@@ -89,43 +136,39 @@ wires the whole path: the host injects the validated config object into the
 call arguments as `__config`, and `ToolInput::with_config` deserializes it into
 `ToolConfig` (fields must all default, because a withheld grant injects `{}`).
 
-## Registry
+## Publishing checklist
 
-`registry.json` at the repo root is generated — never hand-edit it.
-`tools/build_plugins.py` rebuilds it from every publishable
-`plugins/<name>/` (a `manifest.toml` without `registry = false`) plus the
-upstream catalog, with this repo's release URL and the package zip's sha256:
-
-```bash
-uv run --python 3.13 python tools/build_plugins.py --check   # exit 2 if stale
-```
-
-`tools/update_zeroclaw_registry.py` refreshes the upstream half without
-building anything; `--offline` reuses the entries already in
-`registry.json`.
-
-Published `name@version` identities are immutable. Change the code, bump
-`version` in **both** `manifest.toml` and `Cargo.toml`, then rebuild; the build
-refuses to reuse the old digest. New entries appear in `registry.json`
-immediately, but they are only installable after
-`tools/publish_plugins.py` has uploaded the zip to the `plugins` release.
-
-For local iteration, `build_plugins.py` accepts `--skip-tests`,
-`--no-clippy`, `--skip-fmt-check`, and `--skip-metadata`; CI runs all of the
-checks, so do not merge with them skipped.
+- Bump `version` in **both** `manifest.toml` and `Cargo.toml` for any change
+  that alters the wasm or the registry metadata (description, author,
+  capabilities, provides, sender_match).
+- Rebuild the wasm with `--target wasm32-wasip2 --release`.
+- Produce a zip with `<name>/manifest.toml` and `<name>/<wasm_path>` at the
+  top level.
+- Compute the zip's sha256 and record it, along with the release asset URL, in
+  your registry.
+- Published `name@version` identities are immutable; bump the version again
+  rather than overwrite an existing release asset.
 
 ## Install
 
 Once published, install the plugin with the ZeroClaw host binary you built:
 
 ```bash
-export ZEROCLAW_PLUGIN_REGISTRY_URL=https://github.com/seungjin/hanaclaw-plugins/releases/download/plugins/registry.json
+export ZEROCLAW_PLUGIN_REGISTRY_URL=https://example.com/path/to/your/registry.json
 zeroclaw plugin install word-count
 ```
 
 Or pass the registry explicitly per command:
 
 ```bash
-zeroclaw plugin install word-count \
-  --registry https://github.com/seungjin/hanaclaw-plugins/releases/download/plugins/registry.json
+zeroclaw plugin install word-count --registry https://example.com/path/to/your/registry.json
 ```
+
+Replace the registry URL with wherever you host your own `registry.json`.
+
+---
+
+Written with AI/LLM assistance; see the repository [NOTICE](../../NOTICE).
+Licensed MIT OR Apache-2.0; the crate declares `license = "MIT OR Apache-2.0"`
+and ships no license files of its own (copy them from the repository root if
+you publish the crate on its own).
