@@ -1,0 +1,27 @@
+name = "mastodon"
+version = "0.1.1"
+description = "Read and post to a Mastodon account"
+author = "seungjin"
+wasm_path = "mastodon.wasm"
+capabilities = ["tool"]
+# socket_client: HTTPS request to the Mastodon REST API.
+# config_read: operator-supplied instance URL and access token.
+permissions = ["socket_client", "config_read"]
+registry = true
+
+# config_read and config_schema are a biconditional: the host rejects a
+# manifest carrying one without the other. Every key must default so a
+# withheld grant (which injects `{}`) still validates.
+[config_schema]
+"$schema" = "https://json-schema.org/draft/2020-12/schema"
+type = "object"
+additionalProperties = false
+
+[config_schema.properties.instance_url]
+type = "string"
+format = "uri"
+default = "https://mastodon.social"
+
+[config_schema.properties.access_token]
+type = "string"
+default = ""

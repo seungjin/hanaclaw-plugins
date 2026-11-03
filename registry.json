@@ -83,6 +83,17 @@
       "sha256": "2395b8cbce7f5a694bd7ec1acecaf296cbdd5af743db163b256af7f03f25cd6a"
     },
     {
+      "name": "mastodon",
+      "version": "0.1.1",
+      "description": "Read and post to a Mastodon account",
+      "author": "seungjin",
+      "capabilities": [
+        "tool"
+      ],
+      "url": "https://github.com/seungjin/hanaclaw-plugins/releases/download/plugins/mastodon-0.1.1.zip",
+      "sha256": "49d2720017b7b6aaef1e53d145a2f0b959dc010c247019f8e1e5702bd87ffda5"
+    },
+    {
       "name": "matrix",
       "version": "0.3.0",
       "description": "Matrix channel plugin for ZeroClaw: Client-Server sync + text send over wasi:http.",
