@@ -86,9 +86,21 @@ A ZeroClaw plugin package is a reproducible zip containing:
 <name>/<wasm_path>
 ```
 
-Build the zip however your project packages components, publish it to a URL
-your ZeroClaw host can fetch, and add the entry to your registry with the
-matching `sha256` of the zip.
+A convenience script is included at `scripts/publish.sh`. It builds the wasm,
+creates the release zip, computes its sha256, creates the GitHub release if
+necessary, uploads the zip, and prints a registry entry snippet:
+
+```bash
+./scripts/publish.sh              # release tag defaults to "plugins"
+./scripts/publish.sh my-release # use a different release tag
+```
+
+It requires `gh` authenticated with push access. If `gh` is not available, the
+script still builds the zip and prints the sha256 so you can upload manually.
+
+Alternatively, build the zip however your project packages components, publish
+it to a URL your ZeroClaw host can fetch, and add the entry to your registry
+with the matching `sha256` of the zip.
 
 ## What it generates
 
@@ -99,7 +111,9 @@ manifest.toml        # name, version, wasm_path, capabilities, permissions
 src/core.rs          # pure logic (host-testable, no wit-bindgen)
 src/lib.rs           # #[cfg(target_family = "wasm")] component shim
 tests/smoke.rs       # host-run integration test
-.gitignore           # /target, *.wasm (build outputs are never committed)
+wit/v0/              # vendored ZeroClaw WIT contract (self-contained)
+scripts/publish.sh   # convenience script: build, zip, upload, print snippet
+.gitignore           # /target, *.wasm, dist/ (build outputs are never committed)
 ```
 
 No `Cargo.lock` is generated: the first build creates it and every later
