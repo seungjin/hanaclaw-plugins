@@ -26,6 +26,7 @@ Generate from this GitHub repository:
 cargo generate --git https://github.com/seungjin/hanaclaw-plugins \
   templates/zeroclaw-tool-plugin \
   --name word-count \
+  --allow-commands \
   --define tool_name=word_count \
   --define tool_description="Count words in text" \
   --define author=seungjin \
@@ -74,7 +75,7 @@ cd word-count
 cargo build --target wasm32-wasip2 --release
 ```
 
-Refresh the bundled contract from upstream when needed:
+To refresh the bundled contract from upstream later, run:
 
 ```bash
 ./scripts/update-wit.sh

@@ -5,7 +5,6 @@
 [template]
 name = "zeroclaw-tool-plugin"
 description = "Scaffold a ZeroClaw tool plugin (WIT component built for wasm32-wasip2)."
-
 [placeholders.author]
 type = "string"
 prompt = "Author"
@@ -29,3 +28,9 @@ default = false
 type = "bool"
 prompt = "Read operator config? (adds config_read permission + [config_schema])"
 default = false
+
+# After the project is generated, refresh the bundled WIT contract from
+# zeroclaw-labs/zeroclaw-plugins@main so the project starts with the latest
+# upstream contract. Requires network access at generation time.
+[hooks]
+post = ["scripts/update-wit.rhai"]

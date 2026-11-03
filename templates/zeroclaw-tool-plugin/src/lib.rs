@@ -6,7 +6,7 @@
 //! runs on the host; the wasm component reuses it through the thin shim below.
 //!
 //! Test:   cargo test                        (host; no wasm toolchain needed)
-//! Build:  uv run --python 3.13 python tools/build_plugins.py   (repo root)
+//! Build:  cargo build --target wasm32-wasip2 --release
 
 // `core` is shadowed by Rust's core crate, so refer to it as `crate::core`.
 #[allow(clippy::module_inception)]

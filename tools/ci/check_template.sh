@@ -54,6 +54,7 @@ for registry in true false; do
       --path "$tmpl_repo" \
       --destination "$scratch" \
       --name "$name" \
+      --allow-commands \
       --define "tool_name=greet_model" \
       --define "tool_description=CI template probe" \
       --define "author=ci" \
@@ -61,15 +62,6 @@ for registry in true false; do
       --define "config_read=$config_read" \
       --silent; then
       echo "::error::cargo generate failed for registry=$registry config_read=$config_read"
-      status=1
-      echo "::endgroup::"
-      continue
-    fi
-
-    # Crates bind `../../wit/v0`; place the vendored contract beside the
-    # scratch plugins/ directory (a copy, so the real wit/ is untouched).
-    if ! cp -R wit "$workdir/wit"; then
-      echo "::error::could not stage wit/ beside $name"
       status=1
       echo "::endgroup::"
       continue

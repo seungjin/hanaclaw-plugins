@@ -1,37 +1,31 @@
 #!/usr/bin/env bash
-# Update the bundled wit/v0 contract from zeroclaw-labs/zeroclaw-plugins@main.
-# Usage: ./scripts/update-wit.sh
+# Refresh the bundled ZeroClaw WIT contract from upstream.
+# Usage: ./scripts/update-wit.sh [REF]
+#   REF defaults to main.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
-cd "${PROJECT_DIR}"
-
-WIT_DIR="wit/v0"
-UPSTREAM_URL="https://github.com/zeroclaw-labs/zeroclaw-plugins"
-UPSTREAM_BRANCH="main"
-
-echo "==> Updating ${WIT_DIR} from ${UPSTREAM_URL}@${UPSTREAM_BRANCH} ..."
+UPSTREAM="https://github.com/zeroclaw-labs/zeroclaw-plugins"
+REF="${1:-main}"
 
 TMPDIR="$(mktemp -d)"
 trap 'rm -rf "${TMPDIR}"' EXIT
 
-TARBALL="${TMPDIR}/upstream.tar.gz"
-curl -fsSL "${UPSTREAM_URL}/archive/refs/heads/${UPSTREAM_BRANCH}.tar.gz" -o "${TARBALL}"
+echo "==> Fetching WIT contract from ${UPSTREAM}@${REF} ..."
+git clone --quiet --depth 1 --branch "${REF}" --single-branch \
+    "${UPSTREAM}.git" "${TMPDIR}/zeroclaw-plugins"
 
-EXTRACT_DIR="${TMPDIR}/wit"
-mkdir -p "${EXTRACT_DIR}"
-tar -xzf "${TARBALL}" -C "${EXTRACT_DIR}" --strip-components=2 "zeroclaw-plugins-${UPSTREAM_BRANCH}/wit/v0"
+SRC="${TMPDIR}/zeroclaw-plugins/wit/v0"
+DST="${PROJECT_DIR}/wit/v0"
 
-if [[ ! -d "${EXTRACT_DIR}/v0" ]]; then
-    echo "Error: could not extract wit/v0 from upstream tarball"
+if [[ ! -d "${SRC}" ]]; then
+    echo "Error: ${UPSTREAM}@${REF} has no wit/v0 directory"
     exit 1
 fi
 
-# Preserve local files we intentionally keep, if any, by replacing only upstream files.
-rm -rf "${WIT_DIR}"
-mkdir -p "$(dirname "${WIT_DIR}")"
-mv "${EXTRACT_DIR}/v0" "${WIT_DIR}"
+rm -rf "${DST}"
+mkdir -p "${DST}"
+cp -R "${SRC}/"* "${DST}/"
 
-echo "==> Updated ${WIT_DIR}:"
-ls -1 "${WIT_DIR}"
+echo "==> Updated ${DST} from ${UPSTREAM}@${REF}"
