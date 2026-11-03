@@ -18,10 +18,7 @@ mod component {
     // `features` must list the unstable WIT features this world uses; without
     // `plugins-wit-v0` every item in the package is filtered out.
     wit_bindgen::generate!({
-        // This template ships the WIT contract inside the generated crate.
-        // For projects inside hanaclaw-plugins you may instead point this at
-        // the shared repository contract by changing the path to "../../wit/v0"
-        // and removing the local wit/v0 directory.
+        // The WIT contract is bundled with the generated crate.
         path: "./wit/v0",
         world: "tool-plugin",
         features: ["plugins-wit-v0"],

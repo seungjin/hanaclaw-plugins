@@ -67,17 +67,12 @@ does.
 ### Package and publish
 
 The generated crate ships its own copy of the ZeroClaw WIT contract under
-`wit/v0/`. This makes standalone projects build immediately:
+`wit/v0/`, so standalone projects build immediately:
 
 ```bash
 cd word-count
 cargo build --target wasm32-wasip2 --release
 ```
-
-If you are adding the plugin to `hanaclaw-plugins` and want to share the
-repository-wide contract instead, delete the generated `wit/v0/` directory
-and change the `wit_bindgen::generate!` path in `src/lib.rs` from
-`"./wit/v0"` to `"../../wit/v0"`.
 
 A ZeroClaw plugin package is a reproducible zip containing:
 
