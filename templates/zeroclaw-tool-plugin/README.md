@@ -74,6 +74,12 @@ cd word-count
 cargo build --target wasm32-wasip2 --release
 ```
 
+Refresh the bundled contract from upstream when needed:
+
+```bash
+./scripts/update-wit.sh
+```
+
 A ZeroClaw plugin package is a reproducible zip containing:
 
 ```
@@ -107,6 +113,7 @@ src/lib.rs           # #[cfg(target_family = "wasm")] component shim
 tests/smoke.rs       # host-run integration test
 wit/v0/              # vendored ZeroClaw WIT contract (self-contained)
 scripts/release.sh   # convenience script: build, zip, checksum, sign (optional), print snippet
+scripts/update-wit.sh # refresh bundled wit/v0 from zeroclaw-labs/zeroclaw-plugins
 .gitignore           # /target, *.wasm, dist/ (build outputs are never committed)
 ```
 
