@@ -109,7 +109,7 @@ Generate a new plugin directly from the GitHub repository (no local clone needed
 
 ```bash
 cargo generate --git https://github.com/seungjin/hanaclaw-plugins \
-  --subfolder templates/zeroclaw-tool-plugin \
+  templates/zeroclaw-tool-plugin \
   --destination plugins \
   --name word-count \
   --define tool_name=word_count \
