@@ -1,5 +1,5 @@
 name = "mastodon"
-version = "0.1.1"
+version = "0.1.2"
 description = "Read and post to a Mastodon account"
 author = "seungjin"
 wasm_path = "mastodon.wasm"

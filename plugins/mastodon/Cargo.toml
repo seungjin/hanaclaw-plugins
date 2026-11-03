@@ -1,6 +1,6 @@
 [package]
 name = "mastodon"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2024"
 description = "ZeroClaw WIT tool plugin: Read and post to a Mastodon account"
 publish = false
