@@ -105,18 +105,22 @@ Prerequisite (once):
 rustup target add wasm32-wasip2
 ```
 
-Generate a new plugin directly from the GitHub repository (no local clone needed):
+Generate a new plugin directly from the GitHub repository (no local clone needed).
+Run this from the repository root; `cargo generate` will create a `word-count/`
+directory next to `plugins/`, which you then move into `plugins/` so the WIT path
+`../../wit/v0` resolves correctly:
 
 ```bash
 cargo generate --git https://github.com/seungjin/hanaclaw-plugins \
   templates/zeroclaw-tool-plugin \
-  --destination plugins \
   --name word-count \
   --define tool_name=word_count \
   --define tool_description="Count words in text" \
   --define author=seungjin \
   --define registry=true \
   --define config_read=false
+
+mv word-count plugins/
 ```
 
 - `--name` is the crate/project name; it must be **kebab-case** and becomes the
