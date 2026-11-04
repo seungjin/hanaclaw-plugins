@@ -22,7 +22,7 @@ which carries the official plugins and the ones built here.
 **To use this catalog, set your ZeroClaw host to point at its registry once:**
 
 ```bash
-export ZEROCLAW_PLUGIN_REGISTRY_URL=https://github.com/seungjin/hanaclaw-plugins/releases/download/plugins/registry.json
+export ZEROCLAW_PLUGIN_REGISTRY_URL=https://raw.githubusercontent.com/seungjin/hanaclaw-plugins/main/registry.json
 ```
 
 Then install any plugin without repeating the URL:
@@ -35,7 +35,7 @@ Or pass the registry explicitly per command:
 
 ```bash
 zeroclaw plugin install <name> --registry \
-  https://github.com/seungjin/hanaclaw-plugins/releases/download/plugins/registry.json
+  https://raw.githubusercontent.com/seungjin/hanaclaw-plugins/main/registry.json
 ```
 
 This repository is **originated from and modelled on**
@@ -77,7 +77,7 @@ Quick answers:
 | check whether anything is stale | `--check` on the build, registry, and WIT tools |
 | enable the local push guard against silent drops | `git config core.hooksPath .githooks` (once per clone) |
 | run a plugin locally without the full host | `cd tools/wasmtime-harness && cargo run --release -- /path/to/plugin.wasm < args.json` |
-| install a plugin from this catalog | `export ZEROCLAW_PLUGIN_REGISTRY_URL=https://github.com/seungjin/hanaclaw-plugins/releases/download/plugins/registry.json`, then `zeroclaw plugin install <name>` |
+| install a plugin from this catalog | `export ZEROCLAW_PLUGIN_REGISTRY_URL=https://raw.githubusercontent.com/seungjin/hanaclaw-plugins/main/registry.json`, then `zeroclaw plugin install <name>` |
 
 ## Writing a plugin
 
@@ -348,7 +348,7 @@ follows the same scheme:
 | release tag | `plugins` | `plugins` (`PLUGIN_RELEASE_TAG`) |
 | asset name | `<name>-<version>.zip` | same |
 | URL base | `…/zeroclaw-labs/zeroclaw-plugins/releases/download/plugins` | `…/seungjin/hanaclaw-plugins/releases/download/plugins` |
-| catalog | `raw.githubusercontent.com/…/main/registry.json` | same shape |
+| catalog | `raw.githubusercontent.com/…/main/registry.json` | same URL, served from `main` |
 
 So `hello-from-hana@0.1.1` resolves to
 `https://github.com/seungjin/hanaclaw-plugins/releases/download/plugins/hello-from-hana-0.1.1.zip`.
@@ -364,6 +364,12 @@ Notes:
   is the API, `https://api.github.com/repos/<owner>/<repo>/releases`, or the
   committed `registry.json` — which is why the raw registry URL is the thing to
   hand a host.
+- The catalog is served only from `raw.githubusercontent.com/…/main/registry.json`.
+  This repo does **not** upload `registry.json` as a release asset (it once
+  did): a second copy goes stale between publishes and silently competes with
+  the raw URL. `publish.yml` fails if a `registry.json` asset is present, so
+  the release stays zips-only. Upstream still ships one; treat it as their
+  choice, not part of the contract this repo implements.
 - Release assets are not browsable as a tree; the human URL is
   `https://github.com/<owner>/<repo>/releases/tag/plugins`.
 - A published `name@version` asset is immutable. Do not delete and re-upload a
@@ -476,7 +482,7 @@ Install with this registry (the `zeroclaw` in the command is your build of
 the host — this repository ships no binary):
 
 ```bash
-export ZEROCLAW_PLUGIN_REGISTRY_URL=https://github.com/seungjin/hanaclaw-plugins/releases/download/plugins/registry.json
+export ZEROCLAW_PLUGIN_REGISTRY_URL=https://raw.githubusercontent.com/seungjin/hanaclaw-plugins/main/registry.json
 zeroclaw plugin install <name>
 ```
 

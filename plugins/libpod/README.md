@@ -73,7 +73,7 @@ https://github.com/seungjin/hanaclaw-plugins/releases/download/plugins/libpod-0.
 
 ```bash
 # `zeroclaw` here is the host binary you built (or stock zeroclaw).
-export ZEROCLAW_PLUGIN_REGISTRY_URL=https://github.com/seungjin/hanaclaw-plugins/releases/download/plugins/registry.json
+export ZEROCLAW_PLUGIN_REGISTRY_URL=https://raw.githubusercontent.com/seungjin/hanaclaw-plugins/main/registry.json
 zeroclaw plugin install libpod
 ```
 

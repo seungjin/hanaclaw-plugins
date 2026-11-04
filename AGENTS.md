@@ -129,7 +129,11 @@ Run Python only through `uv` (never bare `python`/`python3`); keep
   `…/releases/download/plugins/<name>-<version>.zip`. The release tag is fixed
   (`plugins`), installs pin the asset's sha256, so a published asset is
   immutable and a changed build needs a version bump. `publish_plugins.py`
-  creates the release on first upload.
+  creates the release on first upload. The release holds **zips only**: the
+  catalog is the committed `registry.json` served from
+  `raw.githubusercontent.com/<owner>/<repo>/main/registry.json`, never a
+  release asset (a second copy went stale; `publish.yml` fails if one
+  reappears).
 * Template changes: `cargo generate` reads the template from the git index,
   so `git add templates/` first; test all four combinations of
   `registry` x `config_read` and run the steps above on a generated plugin.

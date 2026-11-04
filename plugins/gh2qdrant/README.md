@@ -38,7 +38,7 @@ release URL and the zip's sha256. `publish_plugins.py` uploads the zip to the
 ## Install
 
 ```bash
-export ZEROCLAW_PLUGIN_REGISTRY_URL=https://github.com/seungjin/hanaclaw-plugins/releases/download/plugins/registry.json
+export ZEROCLAW_PLUGIN_REGISTRY_URL=https://raw.githubusercontent.com/seungjin/hanaclaw-plugins/main/registry.json
 zeroclaw plugin install gh2qdrant
 ```
 
