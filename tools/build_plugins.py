@@ -432,22 +432,51 @@ def newly_unpublishable(
     """Published plugins that would silently vanish from the registry.
 
     Removing a plugin from the registry makes installs of that name/version
-    fail. Retire it deliberately instead: delete the entry from registry.json
-    in a dedicated commit, or keep it by leaving ``registry = false`` out.
+    fail. Retire it deliberately instead: add the identity to the retirement
+    ledger (``--retirements``), or delete the entry from registry.json in a
+    dedicated commit with ``--prune``.
+
+    A superseded version (the same plugin name still builds, at another
+    version) is held to the same rule: CI's growth check refuses the drop
+    unless the base commit's ledger already retired it, so failing here beats
+    discovering it after the commit.
     """
     if not args.output.is_file():
         return []
     _, published = pluginpack.load_registry(args.output)
     release_prefix = args.release_base.rstrip("/") + "/"
-    still_here = {plugin.identity for plugin in plugins if plugin.publishable}
-    return [
-        f"{name}@{version} is in registry.json under {release_prefix} but no "
-        f"publishable plugins/<name>/ builds it any more; removing it breaks "
-        f"installs — re-add the plugin, or rerun with --prune"
-        for (name, version), entry in sorted(published.items())
-        if entry["url"].startswith(release_prefix)
-        and (name, version) not in still_here
-    ]
+    built_versions: dict[str, set[str]] = {}
+    for plugin in plugins:
+        if plugin.publishable:
+            built_versions.setdefault(plugin.name, set()).add(plugin.version)
+    retired = (
+        registry_tool.load_retirements(args.retirements)
+        if args.retirements is not None
+        else {}
+    )
+    messages = []
+    for (name, version), entry in sorted(published.items()):
+        identity = (name, version)
+        if not entry["url"].startswith(release_prefix):
+            continue
+        if identity in retired:
+            continue
+        if version in built_versions.get(name, ()):
+            continue
+        if name in built_versions:
+            built = ", ".join(sorted(built_versions[name]))
+            advice = (
+                f"the plugin now builds only {built}, and the retirement "
+                f"ledger does not cover the old identity yet; add it to "
+                f"registry-retirements.json"
+            )
+        else:
+            advice = "nothing builds it any more; re-add the plugin"
+        messages.append(
+            f"{name}@{version} is in registry.json under {release_prefix} but "
+            f"{advice} (or rerun with --prune)"
+        )
+    return messages
 
 
 def stale_identities(

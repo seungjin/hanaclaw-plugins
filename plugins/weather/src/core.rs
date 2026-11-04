@@ -126,6 +126,57 @@ fn urlencode_city(city: &str) -> String {
     city.trim().replace(' ', "_").replace(['/', '\\'], "")
 }
 
+/// Strip HTTP response headers and return the decoded body.
+///
+/// wttr.in answers `Transfer-Encoding: chunked` (over HTTP/1.1) with a
+/// hex size line before the JSON; without decoding it the payload starts
+/// with the chunk length, not `{`.
+pub fn decode_http_response(response: &str) -> Result<String, String> {
+    let (headers, body) = response
+        .split_once("\r\n\r\n")
+        .ok_or("invalid HTTP response: no header/body delimiter")?;
+
+    let chunked = headers.lines().skip(1).any(|line| {
+        let line = line.to_ascii_lowercase();
+        line.starts_with("transfer-encoding:") && line.contains("chunked")
+    });
+
+    if chunked {
+        decode_chunked(body)
+    } else {
+        Ok(body.to_string())
+    }
+}
+
+/// Decode an HTTP/1.1 chunked body into a plain string.
+fn decode_chunked(body: &str) -> Result<String, String> {
+    let mut decoded = String::new();
+    let mut remaining = body;
+
+    loop {
+        // Each chunk: "<hex-size>[; ext]*\r\n<data>\r\n"
+        let (size_line, rest) = remaining
+            .split_once("\r\n")
+            .ok_or("invalid chunked body: missing chunk size line")?;
+        let size_hex = size_line.split(';').next().unwrap_or("").trim();
+        let size = usize::from_str_radix(size_hex, 16)
+            .map_err(|_| format!("invalid chunked body: bad chunk size `{size_hex}`"))?;
+
+        if size == 0 {
+            break;
+        }
+        if rest.len() < size + 2 {
+            return Err("invalid chunked body: truncated chunk data".to_string());
+        }
+        decoded.push_str(&rest[..size]);
+
+        // Skip the chunk data plus its trailing \r\n.
+        remaining = &rest[size + 2..];
+    }
+
+    Ok(decoded)
+}
+
 /// Run the tool against a wttr.in JSON response.
 ///
 /// In the real wasm guest this function receives the JSON fetched by the
@@ -210,5 +261,28 @@ mod tests {
     #[test]
     fn strips_path_separator_characters() {
         assert_eq!(urlencode_city("a/b\\c"), "abc");
+    }
+
+    #[test]
+    fn decodes_chunked_http_body() {
+        let response = "HTTP/1.1 200 OK\r\n\
+            Content-Type: text/plain\r\n\
+            Transfer-Encoding: chunked\r\n\
+            \r\n\
+            4\r\n{\"a\"\r\n\
+            3\r\n: 1\r\n\
+            0\r\n\r\n";
+        assert_eq!(decode_http_response(response).unwrap(), "{\"a\": 1");
+    }
+
+    #[test]
+    fn returns_body_verbatim_without_chunking() {
+        let response = "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\n{}";
+        assert_eq!(decode_http_response(response).unwrap(), "{}");
+    }
+
+    #[test]
+    fn rejects_response_without_headers() {
+        assert!(decode_http_response("99f9\r\n{").is_err());
     }
 }

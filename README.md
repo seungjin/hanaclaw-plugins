@@ -475,6 +475,18 @@ uv run --python 3.13 python tools/build_plugins.py --package --plugin my-plugin
 uv run --python 3.13 python tools/publish_plugins.py
 ```
 
+The build refuses to replace the old identity in `registry.json` unless the
+retirement ledger covers it (CI's growth check would reject the push anyway):
+
+```bash
+uv run --python 3.13 python tools/build_plugins.py --package --prune \
+  --retirements registry-retirements.json
+```
+
+The check reads the ledger as of the push's *base* commit, so a ledger record
+committed in the same push as the drop does not count. Commit the
+`{"name", "version", "sha256", "reason"}` record first, then the bump.
+
 **Retire a plugin.** Delete `plugins/<name>/` and rebuild with `--prune`, so
 dropping its registry entry is an explicit choice:
 
@@ -571,6 +583,8 @@ Deviations from upstream's workflows, deliberate:
 | `… is already published with sha256 … but the rebuilt package is …` | The source changed under a published version. Bump `version` in **both** `manifest.toml` and `Cargo.toml`. `--skip-metadata` only silences the check; never publish with it. |
 | `… changed registry metadata … after it was published` | Description, author, capabilities, provides, or sender_match changed for a published version. Bump the version. |
 | `registry.json is stale` (exit 2) | Run `tools/build_plugins.py --package`, or `tools/update_zeroclaw_registry.py` for the upstream half only. |
+| `… is in registry.json … the retirement ledger does not cover the old identity yet` | A version bump superseded a published entry. Add the old `name@version` (with its `sha256` from the base registry) to `registry-retirements.json`, then rebuild with `--retirements registry-retirements.json --prune`. |
+| CI `registry` job: `… was dropped without a retirement entry` | The same omission landed in a commit. The check compares against the *base* commit's ledger, so the record must be added in its own commit before the drop; adding ledger and drop together does not satisfy it. |
 | `wit/v0 does not match .sha256` | Hand-edited WIT? Restore with `tools/fetch_zeroclaw_wit.py --ref "$(cat wit/v0/UPSTREAM_REF)"`, or adopt a new contract deliberately. |
 | Build fails right after a WIT refresh | A newer contract changes the wasm bytes. Bump every plugin version first. |
 | `--locked` fails / `Cargo.lock` missing | `cargo generate` writes no lockfile. Build once (the tools do not pass `--locked` themselves), then commit the `Cargo.lock`. |

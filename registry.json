@@ -202,14 +202,14 @@
     },
     {
       "name": "weather",
-      "version": "0.1.1",
+      "version": "0.1.2",
       "description": "Get current weather for a city from wttr.in",
       "author": "seungjin",
       "capabilities": [
         "tool"
       ],
-      "url": "https://github.com/seungjin/hanaclaw-plugins/releases/download/plugins/weather-0.1.1.zip",
-      "sha256": "5b2254f5a422545118b0a5803ac1134921b958d6c5b25924763f92d99b829207"
+      "url": "https://github.com/seungjin/hanaclaw-plugins/releases/download/plugins/weather-0.1.2.zip",
+      "sha256": "5cc422802a4316474e3c3e1148cfcdabb50654f1a0697f3983a1a46508ed12ba"
     },
     {
       "name": "wechat",
