@@ -75,6 +75,7 @@ Quick answers:
 | pull upstream's newest catalog entries | `tools/update_zeroclaw_registry.py` |
 | move to a newer WIT contract | `tools/fetch_zeroclaw_wit.py`, then bump versions |
 | check whether anything is stale | `--check` on the build, registry, and WIT tools |
+| enable the local push guard against silent drops | `git config core.hooksPath .githooks` (once per clone) |
 | run a plugin locally without the full host | `cd tools/wasmtime-harness && cargo run --release -- /path/to/plugin.wasm < args.json` |
 | install a plugin from this catalog | `export ZEROCLAW_PLUGIN_REGISTRY_URL=https://github.com/seungjin/hanaclaw-plugins/releases/download/plugins/registry.json`, then `zeroclaw plugin install <name>` |
 
@@ -436,11 +437,40 @@ uv run --python 3.13 python tools/build_plugins.py --package \
   --retirements registry-retirements.json
 ```
 
-To withdraw one of **your** entries, add a `{"name", "version", "reason"}`
-record to `registry-retirements.json` *before* removing the plugin, commit
-both, and let `tools/ci/check_registry_growth.py` verify the ledger already
-covered the entry that vanished. Editing a plugin in place is never the answer
-— retire the old identity, then publish a new version.
+To withdraw one of **your** entries, add a `{"name", "version", "sha256",
+"reason"}` record to `registry-retirements.json` *before* removing the plugin,
+in its own commit, then remove the entry. Let
+`tools/ci/check_registry_growth.py` verify the ledger already covered the
+identity that vanished. Editing a plugin in place is never the answer — retire
+the old identity, then publish a new version.
+
+The ordering is not cosmetic: a retirement counts only if it exists at the
+commit the drop is measured against. Two local checks enforce the shape and
+the order:
+
+```bash
+# shape of the ledger: kebab-case name, 64-hex sha256, non-empty reason, no
+# duplicate identity, and a record for a live entry must name its bytes
+uv run --python 3.13 python tools/ci/check_retirement_ledger.py
+
+# does this push drop anything still published at its base? Walks every
+# commit in range with the ledger as of the previous commit, so a record
+# added in the same commit as the drop is caught
+uv run --python 3.13 python tools/ci/check_push_ledger.py
+
+# make the second one run before every push
+git config core.hooksPath .githooks
+```
+
+The pre-push hook lives in `.githooks/pre-push`; `core.hooksPath` is local
+configuration, so enable it once per clone. It blocks only on a real
+violation: exit 2 ("cannot determine the base") is a warning, and CI runs the
+same growth check regardless.
+
+`tools/build_plugins.py` also fails when a version bump would leave a
+published identity unretired, unless `--skip-metadata` is passed — that flag
+silences the comparison, so run the ledger checks above before pushing
+anything built with it.
 
 Install with this registry (the `zeroclaw` in the command is your build of
 the host — this repository ships no binary):
@@ -515,7 +545,7 @@ workflow.
 |---|---|
 | `fmt` | `git diff --check`, plus rustfmt on plugins whose `.rs` files this PR touched (untouched crates may carry pre-existing debt; their published bytes cannot be reformatted without a version bump) |
 | `changes` | `tools/ci/plan_matrix.py` shards plugins; `mode=changed` for a PR, `all` for a push |
-| `registry` | toolchain pins agree, `ruff`, WIT checksums, `check_registry_contract.py` (every entry well-formed and unique, every URL the exact asset an install fetches, every publishable plugin recorded), and that `registry.json` only grows |
+| `registry` | toolchain pins agree, `ruff`, WIT checksums, `check_registry_contract.py` (every entry well-formed and unique, every URL the exact asset an install fetches, every publishable plugin recorded), `check_retirement_ledger.py` (every retirement record well-formed, unique, and naming the bytes it withdraws), and that `registry.json` only grows |
 | `wit-drift` | vendored `wit/v0/` still equals the pinned ZeroClaw source |
 | `template` | `cargo generate` from `templates/` builds every combination |
 | `components` | per shard: tests, clippy, `--skip-fmt-check` where allowed, then `build_plugins.py --plugin … --wasm-dir staged --skip-package`; uploads `staged/<name>/<wasm>.wasm` |
@@ -584,7 +614,10 @@ Deviations from upstream's workflows, deliberate:
 | `… changed registry metadata … after it was published` | Description, author, capabilities, provides, or sender_match changed for a published version. Bump the version. |
 | `registry.json is stale` (exit 2) | Run `tools/build_plugins.py --package`, or `tools/update_zeroclaw_registry.py` for the upstream half only. |
 | `… is in registry.json … the retirement ledger does not cover the old identity yet` | A version bump superseded a published entry. Add the old `name@version` (with its `sha256` from the base registry) to `registry-retirements.json`, then rebuild with `--retirements registry-retirements.json --prune`. |
-| CI `registry` job: `… was dropped without a retirement entry` | The same omission landed in a commit. The check compares against the *base* commit's ledger, so the record must be added in its own commit before the drop; adding ledger and drop together does not satisfy it. |
+| CI `registry` job: `… was dropped without a retirement entry` | The same omission landed in a commit. The check compares against the *base* commit's ledger, so the record must be added in its own commit before the drop; adding ledger and drop together does not satisfy it. Run `tools/ci/check_push_ledger.py --range <before>..HEAD` to find the commit, then add the record in a fixup commit. |
+| Pre-push hook: `Push refused: retire the old identity in its own commit first.` | Same rule, caught before pushing. The message names the identity and the commit; add the ledger record in its own commit (`check_retirement_ledger.py` first), then push the drop. |
+| `check_retirement_ledger.py`: `ledger records sha256 … but registry.json publishes …` | The record names different bytes than the live entry. Use the published `sha256` from `registry.json`; retiring other bytes would let the growth check accept a drop nobody installed. |
+| Pre-push hook: `warning: could not check … (2)` | No upstream to compare against (fresh clone without `origin`, or a brand-new branch). Nothing is blocked; CI still enforces the rule on the push. |
 | `wit/v0 does not match .sha256` | Hand-edited WIT? Restore with `tools/fetch_zeroclaw_wit.py --ref "$(cat wit/v0/UPSTREAM_REF)"`, or adopt a new contract deliberately. |
 | Build fails right after a WIT refresh | A newer contract changes the wasm bytes. Bump every plugin version first. |
 | `--locked` fails / `Cargo.lock` missing | `cargo generate` writes no lockfile. Build once (the tools do not pass `--locked` themselves), then commit the `Cargo.lock`. |

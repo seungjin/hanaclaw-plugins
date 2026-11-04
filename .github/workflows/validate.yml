@@ -159,6 +159,14 @@ jobs:
         # instead: every entry well-formed and unique, every URL the exact
         # asset an install will fetch, and every publishable plugin recorded.
         run: uv run --python 3.13 python tools/ci/check_registry_contract.py
+      - name: Check the retirement ledger explains what left the registry
+        shell: bash
+        # The growth check below trusts this file to prove a drop was
+        # deliberate, so a malformed record would silence it. This proves the
+        # records themselves: shape, no duplicates, and that a record which
+        # names an identity still in registry.json names the bytes it
+        # publishes.
+        run: uv run --python 3.13 python tools/ci/check_retirement_ledger.py
       - name: Check the registry only grows
         if: github.event_name == 'pull_request' || github.event_name == 'push'
         shell: bash

@@ -1,0 +1,38 @@
+#!/bin/sh
+# Refuse a push that drops a published registry entry without a retirement
+# committed before the drop. CI (registry job) rejects the same thing after a
+# push; this catches it while it costs nothing. Enable once per clone:
+#
+#   git config core.hooksPath .githooks
+#
+# Standard library only; reads git objects, never the network. Exit 2 means
+# "cannot determine the base" (e.g. no upstream yet) and is not a refusal.
+set -u
+
+status=0
+while read -r local_ref local_sha remote_ref remote_sha; do
+  [ "$local_sha" = "0000000000000000000000000000000000000000" ] && continue
+  case "$remote_sha" in
+    0000000000000000000000000000000000000000)
+      # New branch: check what it carries relative to the upstream default.
+      range=""
+      ;;
+    *)
+      range="--range ${remote_sha}..${local_sha}"
+      ;;
+  esac
+  # shellcheck disable=SC2086 # $range is intentionally empty or two words.
+  python3 tools/ci/check_push_ledger.py $range
+  rc=$?
+  if [ "$rc" -eq 1 ]; then
+    status=1
+  elif [ "$rc" -ne 0 ]; then
+    echo "warning: could not check $local_ref ($rc); CI will still check it" >&2
+  fi
+done
+
+if [ "$status" -ne 0 ]; then
+  echo "" >&2
+  echo "Push refused: retire the old identity in its own commit first." >&2
+  exit 1
+fi

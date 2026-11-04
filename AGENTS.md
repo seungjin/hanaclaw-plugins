@@ -90,6 +90,17 @@ Run Python only through `uv` (never bare `python`/`python3`); keep
   exact `<name>-<version>.zip` asset on a known release base, and every
   publishable plugin in `plugins/` recorded. This is what the `registry` job
   runs, because a fresh clone has no `.wasm` to hash.
+* `uv run --python 3.13 python tools/ci/check_retirement_ledger.py` — the
+  retirement ledger alone: every record well-formed (kebab-case name,
+  version, 64-hex sha256, reason), no duplicate identity, and a record for a
+  live entry must name the bytes `registry.json` publishes. Also a `registry`
+  job step.
+* `uv run --python 3.13 python tools/ci/check_push_ledger.py` — walk the
+  commits a push would add and fail if one drops a published identity the
+  ledger has not retired **as of the previous commit**. This is the local
+  twin of CI's growth check, so a ledger record committed *with* a drop is
+  caught before pushing. `.githooks/pre-push` runs it; enable with
+  `git config core.hooksPath .githooks` (local config, documented in README).
 * `uv run --python 3.13 python tools/update_zeroclaw_registry.py --check
   --offline` — upstream half only; drop `--offline` to compare against
   upstream `main` (network). **Needs a built `.wasm`** next to each manifest
@@ -180,7 +191,12 @@ gate`); `publish.yml` releases. Contract to preserve:
   registry metadata (description, author, capabilities, provides,
   sender_match) — including a WIT refresh or toolchain upgrade.
 * Removing a `plugins/<name>/` entry that is in the registry is an error
-  unless `--prune` is passed; do that only in a deliberate commit.
+  unless `--prune` is passed; do that only in a deliberate commit. The
+  ledger record must be a **separate, earlier** commit: `build_plugins.py`
+  compares against the working tree (so it accepts a same-commit record) and
+  `--skip-metadata` disables the comparison, while CI compares against the
+  pushed base's ledger. Run `tools/ci/check_push_ledger.py` before pushing
+  (the hook does).
 * Never commit `.wasm`, `dist/`, or `target/`.
 
 ## Upstream catalog
